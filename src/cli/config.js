@@ -19,8 +19,8 @@ export function buildCli(handlers) {
       if (err) {
         console.error('\n❌ Error:', err.message);
 
-        if (err.message.includes('yt-dlp')) {
-          console.error('\n💡 Tip: Install yt-dlp with: brew install yt-dlp');
+        if (err.message.includes('yt-dlp') || err.message.includes('ffmpeg')) {
+          console.error('\n💡 Tip: Install dependencies with: brew install yt-dlp ffmpeg');
         } else if (err.message.includes('File not found')) {
           console.error('\n💡 Tip: Check that the audio file path is correct');
         } else if (err.message.includes('Unsupported format')) {
