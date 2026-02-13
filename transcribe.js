@@ -92,11 +92,16 @@ async function handleTranscribe(argv) {
   let youtubeTitle = null;
   let cleanup = null;
 
+  let youtubeDescription = null;
+  let youtubeUploader = null;
+
   if (isYouTubeUrl(input)) {
     console.log('\n🎬 Downloading YouTube audio...\n');
     const download = await downloadYouTubeAudio(input);
     audioFile = download.filePath;
     youtubeTitle = download.title;
+    youtubeDescription = download.description;
+    youtubeUploader = download.uploader;
     cleanup = download.cleanup;
     console.log(`   Saved to temp: ${audioFile}`);
   } else {
@@ -121,7 +126,23 @@ async function handleTranscribe(argv) {
 
   if (diarize && transcript.utterances.length > 0 && openai) {
     console.log('\n🔍 Step 2/3: Identifying speakers...\n');
-    const identification = await openai.identifySpeakers(transcript.utterances, speakerContext);
+
+    // Build combined context from YouTube metadata + user-provided speakers
+    const contextParts = [];
+    if (youtubeTitle) contextParts.push(`Video title: ${youtubeTitle}`);
+    if (youtubeUploader) contextParts.push(`Channel: ${youtubeUploader}`);
+    if (youtubeDescription) {
+      const truncated = youtubeDescription.slice(0, 1000);
+      contextParts.push(`Video description: ${truncated}`);
+    }
+    if (speakerContext) contextParts.push(`Additional context: ${speakerContext}`);
+    const combinedContext = contextParts.join('\n');
+
+    if (contextParts.length > 0) {
+      console.log(`   Using context: ${contextParts.length} source(s) (${combinedContext.length} chars)`);
+    }
+
+    const identification = await openai.identifySpeakers(transcript.utterances, combinedContext);
     speakerMapping = identification.speakers;
     speakerReasoning = identification.reasoning;
 

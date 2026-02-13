@@ -33,15 +33,15 @@ export function isYouTubeUrl(input) {
 /**
  * Download audio from a YouTube URL using yt-dlp
  * @param {string} url - YouTube URL
- * @returns {Object} { filePath, title, cleanup }
+ * @returns {Object} { filePath, title, description, uploader, cleanup }
  */
 export async function downloadYouTubeAudio(url) {
   // Check yt-dlp is installed
   await checkYtDlp();
 
-  // Get video title first (for naming the output)
-  const title = await getVideoTitle(url);
-  console.log(`   Video: ${title}`);
+  // Get video metadata (title, description, uploader) in one call
+  const metadata = await getVideoMetadata(url);
+  console.log(`   Video: ${metadata.title}`);
 
   // Download to temp directory as mp3
   const tempId = randomBytes(4).toString('hex');
@@ -77,7 +77,9 @@ export async function downloadYouTubeAudio(url) {
 
   return {
     filePath: finalPath,
-    title,
+    title: metadata.title,
+    description: metadata.description,
+    uploader: metadata.uploader,
     cleanup() {
       try {
         if (existsSync(finalPath)) unlinkSync(finalPath);
@@ -87,20 +89,31 @@ export async function downloadYouTubeAudio(url) {
 }
 
 /**
- * Get video title from YouTube URL
+ * Get video metadata (title, description, uploader) from YouTube URL
+ * Uses --dump-json for a single request that returns all metadata
  */
-async function getVideoTitle(url) {
-  return new Promise((resolve, reject) => {
+async function getVideoMetadata(url) {
+  return new Promise((resolve) => {
     execFile('yt-dlp', [
-      '--get-title',
+      '--dump-json',
+      '--no-download',
       '--no-warnings',
       url,
-    ], { timeout: 30000 }, (error, stdout) => {
+    ], { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
       if (error) {
-        resolve('Unknown Video');
+        resolve({ title: 'Unknown Video', description: '', uploader: '' });
         return;
       }
-      resolve(stdout.trim() || 'Unknown Video');
+      try {
+        const data = JSON.parse(stdout);
+        resolve({
+          title: data.title || 'Unknown Video',
+          description: data.description || '',
+          uploader: data.uploader || data.channel || '',
+        });
+      } catch {
+        resolve({ title: 'Unknown Video', description: '', uploader: '' });
+      }
     });
   });
 }
