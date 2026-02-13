@@ -5,7 +5,7 @@
 - Node.js 18+
 - AssemblyAI account and API key
 - OpenAI account and API key (optional — for speaker identification)
-- yt-dlp (optional — for YouTube transcription): `brew install yt-dlp`
+- yt-dlp + ffmpeg (optional — for YouTube transcription): `brew install yt-dlp ffmpeg`
 
 ## Installation
 
