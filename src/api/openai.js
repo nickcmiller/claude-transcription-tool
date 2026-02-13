@@ -65,7 +65,7 @@ export function createOpenAIClient(apiKey) {
         console.log('Identifying speakers with OpenAI...');
 
         const completion = await client.beta.chat.completions.parse({
-          model: 'gpt-4o-mini',
+          model: 'gpt-5-nano',
           messages: [
             {
               role: 'system',
