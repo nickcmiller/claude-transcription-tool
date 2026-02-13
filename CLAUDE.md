@@ -10,10 +10,11 @@ transcribe.js                  Main entry point, command handler
 │   └── openai.js              Speaker identification via structured output
 └── src/utils/
     ├── formatters.js          Markdown, text, JSON output formatting
-    └── validators.js          Audio file and format validation
+    ├── validators.js          Audio file and format validation
+    └── youtube.js             YouTube audio download via yt-dlp
 ```
 
-**Data flow**: CLI args → handler → AssemblyAI (transcribe + diarize) → OpenAI (identify speakers) → formatters → console output + file save
+**Data flow**: CLI args → handler → [yt-dlp if YouTube URL] → AssemblyAI (transcribe + diarize) → OpenAI (identify speakers) → formatters → console output + file save
 
 ## Component Responsibilities
 
@@ -25,6 +26,7 @@ transcribe.js                  Main entry point, command handler
 | `src/api/openai.js` | Speaker ID via Zod structured output | Changing prompt, schema, or model |
 | `src/utils/formatters.js` | Output formatting (markdown, text, JSON) | Changing output format, adding new formats |
 | `src/utils/validators.js` | Input validation, format constants | Adding supported formats, changing validation |
+| `src/utils/youtube.js` | YouTube download via yt-dlp | Changing download format, adding URL patterns |
 
 ## Modification Patterns
 
@@ -51,6 +53,7 @@ transcribe.js                  Main entry point, command handler
 - **OpenAI structured output** via `client.beta.chat.completions.parse()` with Zod schema
 - **Model**: `gpt-4o-mini` for speaker identification (cheapest with structured output)
 - **OpenAI is optional** — tool works without it, just skips speaker identification
+- **YouTube support** via yt-dlp — auto-detects YouTube URLs, downloads audio to temp file, cleans up after
 - **Default output**: `Resources/Transcripts/{filename}.md` in the vault
 
 ## Dependencies
@@ -60,6 +63,7 @@ transcribe.js                  Main entry point, command handler
 - `zod` — structured output schema
 - `yargs` — CLI parsing
 - `dotenv` — env vars from local `.env`
+- `yt-dlp` — external binary for YouTube download (`brew install yt-dlp`)
 
 ## CLI Reference
 

@@ -14,6 +14,7 @@
  * EXAMPLES:
  *   node .scripts/transcription/transcribe.js transcribe recording.mp3
  *   node .scripts/transcription/transcribe.js transcribe meeting.m4a -s "Meeting between Nick and Sarah"
+ *   node .scripts/transcription/transcribe.js transcribe https://youtube.com/watch?v=xxx
  *   node .scripts/transcription/transcribe.js transcribe call.wav -o "Resources/Meetings/call.md"
  *   node .scripts/transcription/transcribe.js transcribe lecture.mp3 --no-diarize --format text
  *
@@ -31,6 +32,7 @@ import { buildCli } from './src/cli/config.js';
 import { createAssemblyAIClient } from './src/api/assemblyai.js';
 import { createOpenAIClient } from './src/api/openai.js';
 import { validateAudioFile } from './src/utils/validators.js';
+import { isYouTubeUrl, downloadYouTubeAudio } from './src/utils/youtube.js';
 import {
   mapSpeakerNames,
   formatMarkdown,
@@ -80,15 +82,30 @@ function initClients() {
 async function handleTranscribe(argv) {
   const { assemblyai, openai } = initClients();
 
-  const audioFile = resolve(argv.audioFile);
+  const input = argv.audioFile;
   const diarize = !argv.noDiarize;
   const speakerContext = argv.speakers || '';
   const format = argv.format;
 
-  // Step 1: Validate input
-  validateAudioFile(audioFile);
+  // Step 0: Resolve input — YouTube URL or local file
+  let audioFile;
+  let youtubeTitle = null;
+  let cleanup = null;
 
-  // Step 2: Transcribe with AssemblyAI
+  if (isYouTubeUrl(input)) {
+    console.log('\n🎬 Downloading YouTube audio...\n');
+    const download = await downloadYouTubeAudio(input);
+    audioFile = download.filePath;
+    youtubeTitle = download.title;
+    cleanup = download.cleanup;
+    console.log(`   Saved to temp: ${audioFile}`);
+  } else {
+    audioFile = resolve(input);
+    validateAudioFile(audioFile);
+  }
+
+  try {
+  // Step 1: Transcribe with AssemblyAI
   console.log('\n📝 Step 1/3: Transcribing audio...\n');
   const transcript = await assemblyai.transcribe(audioFile, { diarize });
 
@@ -124,11 +141,15 @@ async function handleTranscribe(argv) {
   // Step 4: Format and save output
   console.log('\n💾 Step 3/3: Saving output...\n');
 
-  const sourceFilename = basename(audioFile, extname(audioFile));
+  // Use YouTube title if available, otherwise derive from file path
+  const sourceFilename = youtubeTitle
+    ? youtubeTitle.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 100)
+    : basename(audioFile, extname(audioFile));
   const metadata = {
     audioDuration: transcript.audioDuration,
     transcriptId: transcript.id,
     speakerReasoning,
+    ...(youtubeTitle ? { sourceUrl: input, youtubeTitle } : {}),
   };
 
   let content;
@@ -169,6 +190,10 @@ async function handleTranscribe(argv) {
   printConsoleOutput(mappedUtterances, transcript.text);
 
   console.log('\n✅ Done!');
+
+  } finally {
+    if (cleanup) cleanup();
+  }
 }
 
 // ============================================================================

@@ -19,7 +19,9 @@ export function buildCli(handlers) {
       if (err) {
         console.error('\n❌ Error:', err.message);
 
-        if (err.message.includes('File not found')) {
+        if (err.message.includes('yt-dlp')) {
+          console.error('\n💡 Tip: Install yt-dlp with: brew install yt-dlp');
+        } else if (err.message.includes('File not found')) {
           console.error('\n💡 Tip: Check that the audio file path is correct');
         } else if (err.message.includes('Unsupported format')) {
           console.error(`\n💡 Supported: ${SUPPORTED_FORMATS.join(', ')}`);
@@ -42,11 +44,11 @@ export function buildCli(handlers) {
     // ============================================================================
     .command(
       ['transcribe <audio-file>', 'tx <audio-file>'],
-      'Transcribe an audio file with optional speaker diarization',
+      'Transcribe an audio file or YouTube URL with optional speaker diarization',
       (yargs) => {
         return yargs
           .positional('audio-file', {
-            describe: 'Path to the audio file',
+            describe: 'Path to audio file or YouTube URL',
             type: 'string',
           })
           .option('speakers', {
@@ -73,6 +75,7 @@ export function buildCli(handlers) {
           })
           .example('$0 transcribe recording.mp3', 'Basic transcription with diarization')
           .example('$0 transcribe meeting.m4a -s "Meeting between Nick and Sarah"', 'With speaker context')
+          .example('$0 transcribe https://youtube.com/watch?v=xxx', 'Transcribe a YouTube video')
           .example('$0 transcribe call.wav -o "Resources/Meetings/call.md"', 'Custom output path')
           .example('$0 transcribe lecture.mp3 --no-diarize --format text', 'No diarization, plain text');
       },

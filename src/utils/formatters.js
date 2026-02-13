@@ -50,6 +50,9 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
   if (metadata.transcriptId) {
     lines.push(`assemblyai_id: ${metadata.transcriptId}`);
   }
+  if (metadata.sourceUrl) {
+    lines.push(`source: ${metadata.sourceUrl}`);
+  }
   lines.push('---');
   lines.push('');
 
