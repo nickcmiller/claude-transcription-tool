@@ -108,7 +108,6 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - **YouTube support** via yt-dlp — auto-detects YouTube URLs, downloads audio to temp file, cleans up after
 - **Default output**: `Resources/Transcripts/{filename}.md` in the vault
 - **Metadata + Content**: Every transcription saves a row to SQLite with source info, speakers, duration, file path, and the full transcript content (enables cross-tool workflows without reading vault files)
-- **Saving to Reader**: Use the `/reader-save` skill — it documents how to query the DB for content and save to Readwise Reader
 
 ## Dependencies
 
