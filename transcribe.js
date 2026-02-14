@@ -232,6 +232,7 @@ async function handleTranscribe(argv) {
     file_path: relative(VAULT_ROOT, outputPath),
     created_at: new Date().toISOString(),
     raw_metadata: youtubeRawMetadata,
+    content: content,
   });
 
   // Console preview

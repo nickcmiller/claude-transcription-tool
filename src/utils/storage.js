@@ -17,7 +17,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const DATABASE_FILE = 'transcription.db';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 // Data directory: sibling to vault, like readwise-data/
 // __dirname is src/utils/ → five levels up reaches Documents/
@@ -101,7 +101,8 @@ function initializeSchema(db) {
       speakers TEXT,
       file_path TEXT,
       created_at TEXT NOT NULL,
-      raw_metadata TEXT
+      raw_metadata TEXT,
+      content TEXT
     )
   `);
 
@@ -110,11 +111,17 @@ function initializeSchema(db) {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_transcripts_channel ON transcripts(channel)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_transcripts_created_at ON transcripts(created_at)`);
 
-  // Set schema version
+  // Migrate from v1 → v2: add content column
   const existing = db.prepare('SELECT value FROM metadata WHERE key = ?').get('db_version');
-  if (!existing) {
-    db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)').run('db_version', String(DATABASE_VERSION));
+  if (existing && Number(existing.value) < 2) {
+    const columns = db.pragma('table_info(transcripts)').map(c => c.name);
+    if (!columns.includes('content')) {
+      db.exec('ALTER TABLE transcripts ADD COLUMN content TEXT');
+    }
   }
+
+  // Set or update schema version
+  db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run('db_version', String(DATABASE_VERSION));
 }
 
 // ============================================================================
@@ -133,11 +140,11 @@ export function saveTranscript(dataDir, record) {
     INSERT OR REPLACE INTO transcripts (
       id, source_url, source_type, title, description,
       channel, channel_url, duration_seconds, speakers,
-      file_path, created_at, raw_metadata
+      file_path, created_at, raw_metadata, content
     ) VALUES (
       @id, @source_url, @source_type, @title, @description,
       @channel, @channel_url, @duration_seconds, @speakers,
-      @file_path, @created_at, @raw_metadata
+      @file_path, @created_at, @raw_metadata, @content
     )
   `);
 
@@ -154,5 +161,6 @@ export function saveTranscript(dataDir, record) {
     file_path: record.file_path ?? null,
     created_at: record.created_at,
     raw_metadata: record.raw_metadata ?? null,
+    content: record.content ?? null,
   });
 }

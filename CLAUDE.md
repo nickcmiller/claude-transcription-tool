@@ -50,6 +50,7 @@ Metadata for every transcription is stored in a SQLite database at `../transcrip
 | `file_path` | TEXT | Relative path to vault markdown file |
 | `created_at` | TEXT | ISO timestamp of when transcribed |
 | `raw_metadata` | TEXT | Full yt-dlp JSON dump (null for local) |
+| `content` | TEXT | Full formatted transcript text (markdown/text/JSON) |
 
 Indexes on `source_type`, `channel`, `created_at`.
 
@@ -74,6 +75,9 @@ sqlite3 "../transcription-data/transcription.db" "SELECT title, source_url FROM 
 
 # Get file path for a transcript
 sqlite3 "../transcription-data/transcription.db" "SELECT file_path FROM transcripts WHERE title LIKE '%keyword%'"
+
+# Get transcript content directly from DB (no need to read vault file)
+sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcripts WHERE title LIKE '%keyword%'"
 ```
 
 ## Modification Patterns
@@ -103,7 +107,7 @@ sqlite3 "../transcription-data/transcription.db" "SELECT file_path FROM transcri
 - **OpenAI is optional** — tool works without it, just skips speaker identification. If the API errors or context limit is exceeded, falls back to generic speaker labels gracefully.
 - **YouTube support** via yt-dlp — auto-detects YouTube URLs, downloads audio to temp file, cleans up after
 - **Default output**: `Resources/Transcripts/{filename}.md` in the vault
-- **Metadata**: Every transcription saves a row to SQLite with source info, speakers, duration, and file path
+- **Metadata + Content**: Every transcription saves a row to SQLite with source info, speakers, duration, file path, and the full transcript content (enables cross-tool workflows without reading vault files)
 
 ## Dependencies
 
