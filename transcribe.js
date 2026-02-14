@@ -4,12 +4,13 @@
  * Audio Transcription Tool
  *
  * DESCRIPTION:
- *   Transcribes audio files using AssemblyAI with speaker diarization,
- *   then identifies speakers using OpenAI structured output.
+ *   Transcribes audio files or YouTube URLs using AssemblyAI with speaker
+ *   diarization, then identifies speakers using OpenAI structured output.
  *   Outputs Obsidian-friendly markdown, plain text, or JSON.
+ *   Saves transcript metadata to SQLite at ../transcription-data/transcription.db.
  *
  * USAGE:
- *   node .scripts/transcription/transcribe.js transcribe <audio-file> [options]
+ *   node .scripts/transcription/transcribe.js transcribe <audio-file-or-url> [options]
  *
  * EXAMPLES:
  *   node .scripts/transcription/transcribe.js transcribe recording.mp3
@@ -17,6 +18,10 @@
  *   node .scripts/transcription/transcribe.js transcribe https://youtube.com/watch?v=xxx
  *   node .scripts/transcription/transcribe.js transcribe call.wav -o "Resources/Meetings/call.md"
  *   node .scripts/transcription/transcribe.js transcribe lecture.mp3 --no-diarize --format text
+ *
+ * OUTPUT:
+ *   - Markdown/text/JSON file → Resources/Transcripts/ (or custom -o path)
+ *   - Metadata row → ../transcription-data/transcription.db (source, speakers, duration, etc.)
  *
  * SETUP:
  *   See SETUP.md for complete installation and configuration instructions
