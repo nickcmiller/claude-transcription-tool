@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "assemblyai": "^4.8.0",
+    "better-sqlite3": "^12.6.2",
     "dotenv": "^16.6.1",
     "openai": "^4.77.0",
     "yargs": "^17.7.2",

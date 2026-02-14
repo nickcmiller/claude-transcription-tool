@@ -33,13 +33,13 @@ export function isYouTubeUrl(input) {
 /**
  * Download audio from a YouTube URL using yt-dlp
  * @param {string} url - YouTube URL
- * @returns {Object} { filePath, title, description, uploader, cleanup }
+ * @returns {Object} { filePath, title, description, uploader, channelUrl, rawMetadata, cleanup }
  */
 export async function downloadYouTubeAudio(url) {
   // Check yt-dlp is installed
   await checkYtDlp();
 
-  // Get video metadata (title, description, uploader) in one call
+  // Get video metadata (title, description, uploader, channelUrl, rawMetadata) in one call
   const metadata = await getVideoMetadata(url);
   console.log(`   Video: ${metadata.title}`);
 
@@ -80,6 +80,8 @@ export async function downloadYouTubeAudio(url) {
     title: metadata.title,
     description: metadata.description,
     uploader: metadata.uploader,
+    channelUrl: metadata.channelUrl,
+    rawMetadata: metadata.rawMetadata,
     cleanup() {
       try {
         if (existsSync(finalPath)) unlinkSync(finalPath);
@@ -101,7 +103,7 @@ async function getVideoMetadata(url) {
       url,
     ], { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
       if (error) {
-        resolve({ title: 'Unknown Video', description: '', uploader: '' });
+        resolve({ title: 'Unknown Video', description: '', uploader: '', channelUrl: null, rawMetadata: null });
         return;
       }
       try {
@@ -110,9 +112,11 @@ async function getVideoMetadata(url) {
           title: data.title || 'Unknown Video',
           description: data.description || '',
           uploader: data.uploader || data.channel || '',
+          channelUrl: data.channel_url || null,
+          rawMetadata: stdout,
         });
       } catch {
-        resolve({ title: 'Unknown Video', description: '', uploader: '' });
+        resolve({ title: 'Unknown Video', description: '', uploader: '', channelUrl: null, rawMetadata: null });
       }
     });
   });

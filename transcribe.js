@@ -26,7 +26,7 @@
 
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname, join, resolve, basename, extname } from 'path';
+import { dirname, join, resolve, relative, basename, extname } from 'path';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { buildCli } from './src/cli/config.js';
 import { createAssemblyAIClient } from './src/api/assemblyai.js';
@@ -40,6 +40,7 @@ import {
   formatJson,
   printConsoleOutput,
 } from './src/utils/formatters.js';
+import { saveTranscript, DATA_DIR } from './src/utils/storage.js';
 
 // ============================================================================
 // Environment Setup
@@ -94,6 +95,8 @@ async function handleTranscribe(argv) {
 
   let youtubeDescription = null;
   let youtubeUploader = null;
+  let youtubeChannelUrl = null;
+  let youtubeRawMetadata = null;
 
   if (isYouTubeUrl(input)) {
     console.log('\n🎬 Downloading YouTube audio...\n');
@@ -102,6 +105,8 @@ async function handleTranscribe(argv) {
     youtubeTitle = download.title;
     youtubeDescription = download.description;
     youtubeUploader = download.uploader;
+    youtubeChannelUrl = download.channelUrl;
+    youtubeRawMetadata = download.rawMetadata;
     cleanup = download.cleanup;
     console.log(`   Saved to temp: ${audioFile}`);
   } else {
@@ -206,6 +211,23 @@ async function handleTranscribe(argv) {
 
   writeFileSync(outputPath, content, 'utf-8');
   console.log(`   Saved to: ${outputPath}`);
+
+  // Save transcript metadata to database
+  const isYouTube = isYouTubeUrl(input);
+  saveTranscript(DATA_DIR, {
+    id: transcript.id,
+    source_url: isYouTube ? input : null,
+    source_type: isYouTube ? 'youtube' : 'local',
+    title: sourceFilename,
+    description: youtubeDescription,
+    channel: youtubeUploader,
+    channel_url: youtubeChannelUrl,
+    duration_seconds: transcript.audioDuration,
+    speakers: JSON.stringify(speakerMapping.map(s => s.name)),
+    file_path: relative(VAULT_ROOT, outputPath),
+    created_at: new Date().toISOString(),
+    raw_metadata: youtubeRawMetadata,
+  });
 
   // Console preview
   printConsoleOutput(mappedUtterances, transcript.text);
