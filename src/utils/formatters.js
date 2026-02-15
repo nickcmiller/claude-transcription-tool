@@ -83,16 +83,12 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
 
   // Transcript body
   if (utterances && utterances.length > 0) {
-    lines.push('## Transcript');
-    lines.push('');
     for (const u of utterances) {
       const ts = formatTimestamp(u.start);
       lines.push(`${ts} **${u.speaker}**: ${u.text}`);
       lines.push('');
     }
   } else {
-    lines.push('## Transcript');
-    lines.push('');
     lines.push(text || '(No transcript text available)');
     lines.push('');
   }
