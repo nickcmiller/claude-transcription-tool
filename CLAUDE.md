@@ -105,6 +105,16 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 2. Create handler function in `transcribe.js`
 3. Register handler in the `handlers` object in `main()`
 
+### Transcribing a Podcast by Name
+
+When the user asks to transcribe a podcast episode by name (e.g. "transcribe the latest Stratechery"), check saved feeds first:
+
+1. Run `feed list` to see if a feed is saved for that podcast
+2. If found, run `feed <name> -n 5` to get recent episodes with audio URLs
+3. Run `transcribe <audio-url>` with the episode URL from the results
+
+If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for public podcasts via iTunes.
+
 ## Key Details
 
 - **AssemblyAI SDK** handles file upload + polling automatically (no manual polling)
