@@ -156,18 +156,16 @@ export function createOpenAIClient(apiKey) {
             messages: [
               {
                 role: 'system',
-                content: 'You are a text formatter. Insert paragraph breaks into long spoken passages to improve readability. Never alter the wording. Each paragraph MUST contain multiple sentences — never put a single sentence alone.',
+                content: 'You are a text formatter. Split long spoken passages into paragraphs for readability. Preserve the exact wording.',
               },
               {
                 role: 'user',
                 content: [
                   'Split this long spoken passage into paragraphs at natural topic shifts.',
                   'Rules:',
-                  '- Do NOT change any wording — return the exact original text, just split into chunks',
-                  '- Each paragraph MUST be at least 3 sentences long',
-                  '- Aim for 3-6 sentences per paragraph (roughly 200-500 characters each)',
-                  '- Only break where the speaker changes topic — NOT between every sentence',
-                  '- Fewer, larger paragraphs are better than many small ones',
+                  '- Preserve exact wording — only split into chunks',
+                  '- 3-6 sentences per paragraph (aim for 200-500 characters each)',
+                  '- Fewer, larger paragraphs are better',
                   '',
                   updated[idx].text,
                 ].join('\n'),
