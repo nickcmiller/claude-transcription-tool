@@ -134,6 +134,10 @@ async function handleTranscribe(argv) {
     validateAudioFile(sourceInfo.filePath);
   }
 
+  if (argv.title) {
+    sourceInfo.title = argv.title;
+  }
+
   try {
     // Step 1: Transcribe with AssemblyAI
     console.log('\n📝 Step 1/3: Transcribing audio...\n');

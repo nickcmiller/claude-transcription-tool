@@ -111,7 +111,7 @@ When the user asks to transcribe a podcast episode by name (e.g. "transcribe the
 
 1. Run `feed list` to see if a feed is saved for that podcast
 2. If found, run `feed <name> -n 5` to get recent episodes with audio URLs
-3. Run `transcribe <audio-url>` with the episode URL from the results
+3. Run `transcribe <audio-url> -t "Episode Title"` with the episode URL and title from the results. **Always pass `--title`** for feed/URL sources — without it, the output filename comes from the URL slug instead of the episode title.
 
 If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for public podcasts via iTunes.
 
@@ -123,6 +123,7 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - **OpenAI is optional** — tool works without it, just skips speaker identification and paragraph breaking. If the API errors or context limit is exceeded, falls back gracefully.
 - **Paragraph breaking** — utterances over 1500 chars are sent to gpt-5-nano to insert `\n\n` at natural boundaries (one call per passage). Runs automatically when OpenAI is available.
 - **URL support** via yt-dlp — works with any yt-dlp-supported URL (YouTube, podcasts, etc.), downloads audio to temp file, cleans up after
+- **Title override** (`--title` / `-t`) — overrides the title derived from yt-dlp metadata or URL filename; use when transcribing private feed episodes or any URL where the filename doesn't reflect the actual title
 - **URL deduplication** — warns and exits if a URL was already transcribed; use `--force` to override
 - **File collision handling** — auto-appends `(2)`, `(3)`, etc. if output file already exists
 - **Utterance timestamps** — `[MM:SS]` prefix on each utterance in markdown and text output

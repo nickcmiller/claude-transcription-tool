@@ -78,6 +78,11 @@ export function buildCli(handlers) {
             type: 'boolean',
             default: false,
           })
+          .option('title', {
+            alias: 't',
+            describe: 'Override episode/file title (used for output filename and metadata)',
+            type: 'string',
+          })
           .example('$0 transcribe recording.mp3', 'Basic transcription with diarization')
           .example('$0 transcribe meeting.m4a -s "Meeting between Nick and Sarah"', 'With speaker context')
           .example('$0 transcribe https://youtube.com/watch?v=xxx', 'Transcribe a YouTube video')
