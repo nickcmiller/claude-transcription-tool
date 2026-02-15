@@ -267,7 +267,7 @@ export function createOpenAIClient(apiKey) {
                 usage.completion_tokens += r.usage.completion_tokens;
               }
             }
-            return { text: texts.join('\n\n'), usage };
+            return { text: texts.join('\n\n'), usage, chunkCount: chunks.length };
           });
         })
       );
@@ -276,12 +276,12 @@ export function createOpenAIClient(apiKey) {
       let totalIn = 0, totalOut = 0, totalCalls = 0;
       for (let i = 0; i < longEntries.length; i++) {
         const [idx] = longEntries[i];
-        const { text, usage } = results[i];
+        const { text, usage, chunkCount } = results[i];
         if (text) updated[idx] = { ...updated[idx], text };
         if (usage) {
           totalIn += usage.prompt_tokens;
           totalOut += usage.completion_tokens;
-          totalCalls += chunkText(longEntries[i][1].text).length;
+          totalCalls += chunkCount || 1;
         }
       }
 

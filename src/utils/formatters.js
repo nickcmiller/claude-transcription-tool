@@ -81,12 +81,6 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
   lines.push(`# ${filename}`);
   lines.push('');
 
-  // Speaker identification info
-  if (metadata.speakerReasoning) {
-    lines.push(`> **Speaker identification**: ${metadata.speakerReasoning}`);
-    lines.push('');
-  }
-
   // Transcript body
   if (utterances && utterances.length > 0) {
     lines.push('## Transcript');
