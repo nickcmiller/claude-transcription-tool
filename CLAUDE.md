@@ -7,7 +7,8 @@ transcribe.js                  Main entry point, command handlers
 ├── src/cli/config.js          CLI commands and options (yargs)
 ├── src/api/
 │   ├── assemblyai.js          Transcription with speaker diarization
-│   └── openai.js              Speaker identification via structured output
+│   ├── openai.js              Speaker identification via structured output
+│   └── itunes.js              iTunes Search API (podcast discovery)
 └── src/utils/
     ├── downloader.js          Audio download via yt-dlp (any URL)
     ├── formatters.js          Markdown, text, JSON output formatting
@@ -28,6 +29,7 @@ transcribe.js                  Main entry point, command handlers
 | `src/utils/formatters.js` | Output formatting (markdown, text, JSON) | Changing output format, adding new formats |
 | `src/utils/storage.js` | SQLite DB for transcript metadata + queries | Changing schema, adding query functions |
 | `src/utils/validators.js` | Input validation, format constants | Adding supported formats, changing validation |
+| `src/api/itunes.js` | iTunes podcast search + episode listing | Changing API params, adding podcast metadata |
 | `src/utils/downloader.js` | Audio download via yt-dlp (any URL) | Changing download format, adding URL support |
 
 ## Transcript Database
@@ -113,6 +115,8 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - **Default output**: `Resources/Transcripts/{filename}.md` in the vault
 - **Metadata + Content**: Every transcription saves a row to SQLite with source info, speakers, duration, file path, and the full transcript content (enables cross-tool workflows without reading vault files)
 - **`list` command** — query transcript history from the CLI with filters (channel, speaker, source type)
+- **`podcast` command** — search for podcasts by name via iTunes Search API (no auth required)
+- **`episodes` command** — list recent episodes for a podcast by iTunes ID, with direct audio URLs for transcription
 
 ## Dependencies
 

@@ -121,5 +121,53 @@ export function buildCli(handlers) {
           .example('$0 list --source-type youtube -n 10', 'YouTube transcripts, last 10');
       },
       handlers.list
+    )
+
+    // ============================================================================
+    // podcast command
+    // ============================================================================
+    .command(
+      ['podcast <query>', 'pod <query>'],
+      'Search for podcasts by name (via iTunes)',
+      (yargs) => {
+        return yargs
+          .positional('query', {
+            describe: 'Podcast name to search for',
+            type: 'string',
+          })
+          .option('limit', {
+            alias: 'n',
+            describe: 'Maximum number of results',
+            type: 'number',
+            default: 10,
+          })
+          .example('$0 podcast "lex fridman"', 'Search for a podcast')
+          .example('$0 pod "huberman lab" -n 5', 'Search with limit');
+      },
+      handlers.podcast
+    )
+
+    // ============================================================================
+    // episodes command
+    // ============================================================================
+    .command(
+      ['episodes <id>', 'ep <id>'],
+      'List recent episodes for a podcast by iTunes ID',
+      (yargs) => {
+        return yargs
+          .positional('id', {
+            describe: 'iTunes podcast ID (from podcast search results)',
+            type: 'number',
+          })
+          .option('limit', {
+            alias: 'n',
+            describe: 'Maximum number of episodes',
+            type: 'number',
+            default: 10,
+          })
+          .example('$0 episodes 1434243584 -n 5', 'List recent episodes')
+          .example('$0 ep 1434243584', 'Using alias');
+      },
+      handlers.episodes
     );
 }

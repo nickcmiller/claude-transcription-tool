@@ -49,6 +49,7 @@ import {
   printConsoleOutput,
 } from './src/utils/formatters.js';
 import { saveTranscript, findBySourceUrl, listTranscripts } from './src/utils/storage.js';
+import { searchPodcasts, getEpisodes } from './src/api/itunes.js';
 
 // ============================================================================
 // Environment Setup
@@ -294,6 +295,53 @@ async function handleList(argv) {
   console.log(`\n${rows.length} transcript(s) shown.`);
 }
 
+async function handlePodcast(argv) {
+  const results = await searchPodcasts(argv.query, { limit: argv.limit });
+
+  if (results.length === 0) {
+    console.log(`No podcasts found for "${argv.query}".`);
+    return;
+  }
+
+  const header = `${'ID'.padEnd(12)} ${'Podcast'.padEnd(35)} ${'Artist'.padEnd(22)} ${'Eps'.padEnd(5)} Genre`;
+  console.log(header);
+  console.log('─'.repeat(header.length));
+
+  for (const r of results) {
+    const id = String(r.id).padEnd(12);
+    const name = r.name.slice(0, 33).padEnd(35);
+    const artist = r.artist.slice(0, 20).padEnd(22);
+    const eps = String(r.episodeCount).padEnd(5);
+    console.log(`${id} ${name} ${artist} ${eps} ${r.genre}`);
+  }
+
+  console.log(`\n${results.length} result(s). Use: episodes <ID> to browse episodes.`);
+}
+
+async function handleEpisodes(argv) {
+  const { show, episodes } = await getEpisodes(argv.id, { limit: argv.limit });
+
+  if (episodes.length === 0) {
+    console.log(`No episodes found for podcast ID ${argv.id}.`);
+    return;
+  }
+
+  console.log(`\n${show.name} — ${show.artist}\n`);
+
+  const header = `${'Date'.padEnd(12)} ${'Mins'.padEnd(6)} ${'Episode'.padEnd(50)} URL`;
+  console.log(header);
+  console.log('─'.repeat(header.length));
+
+  for (const ep of episodes) {
+    const date = ep.date.padEnd(12);
+    const mins = (ep.duration ? String(ep.duration) : '—').padEnd(6);
+    const name = ep.name.slice(0, 48).padEnd(50);
+    console.log(`${date} ${mins} ${name} ${ep.url}`);
+  }
+
+  console.log(`\n${episodes.length} episode(s). Use: transcribe <URL> to transcribe.`);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -302,6 +350,8 @@ async function main() {
   const handlers = {
     transcribe: handleTranscribe,
     list: handleList,
+    podcast: handlePodcast,
+    episodes: handleEpisodes,
   };
 
   const cli = buildCli(handlers);
