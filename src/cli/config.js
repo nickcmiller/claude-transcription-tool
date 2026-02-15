@@ -169,5 +169,33 @@ export function buildCli(handlers) {
           .example('$0 ep 1434243584', 'Using alias');
       },
       handlers.episodes
+    )
+
+    // ============================================================================
+    // feed command
+    // ============================================================================
+    .command(
+      'feed [source..]',
+      'Fetch RSS feed episodes, or manage saved private feeds',
+      (yargs) => {
+        return yargs
+          .positional('source', {
+            describe: 'Feed URL, saved name, or subcommand (add/rm/list)',
+            type: 'string',
+            array: true,
+          })
+          .option('limit', {
+            alias: 'n',
+            describe: 'Maximum number of episodes',
+            type: 'number',
+            default: 20,
+          })
+          .example('$0 feed add stratechery "https://example.com/feed"', 'Save a private feed')
+          .example('$0 feed stratechery -n 5', 'Browse saved feed episodes')
+          .example('$0 feed "https://example.com/feed.xml"', 'Browse feed by URL')
+          .example('$0 feed list', 'Show all saved feeds')
+          .example('$0 feed rm stratechery', 'Remove a saved feed');
+      },
+      handlers.feed
     );
 }

@@ -50,6 +50,8 @@ import {
 } from './src/utils/formatters.js';
 import { saveTranscript, findBySourceUrl, listTranscripts } from './src/utils/storage.js';
 import { searchPodcasts, getEpisodes } from './src/api/itunes.js';
+import { fetchFeed } from './src/api/rss.js';
+import { loadFeeds, addFeed, removeFeed, getFeedUrl } from './src/utils/feeds.js';
 
 // ============================================================================
 // Environment Setup
@@ -342,6 +344,98 @@ async function handleEpisodes(argv) {
   console.log(`\n${episodes.length} episode(s). Use: transcribe <URL> to transcribe.`);
 }
 
+async function handleFeed(argv) {
+  const source = argv.source || [];
+  const sub = source[0] || '';
+
+  // Subcommands: add, rm, list
+  if (sub === 'list') {
+    const feeds = loadFeeds();
+    const entries = Object.entries(feeds);
+    if (entries.length === 0) {
+      console.log('No saved feeds. Use: feed add <name> <url>');
+      return;
+    }
+    const header = `${'Name'.padEnd(20)} URL`;
+    console.log(header);
+    console.log('─'.repeat(header.length));
+    for (const [name, url] of entries) {
+      console.log(`${name.padEnd(20)} ${url}`);
+    }
+    console.log(`\n${entries.length} feed(s) saved.`);
+    return;
+  }
+
+  if (sub === 'add') {
+    const name = source[1];
+    const url = source[2];
+    if (!name || !url) {
+      console.error('Usage: feed add <name> <url>');
+      process.exit(1);
+    }
+    addFeed(name, url);
+    console.log(`Saved feed "${name.toLowerCase()}" → ${url}`);
+    return;
+  }
+
+  if (sub === 'rm') {
+    const name = source[1];
+    if (!name) {
+      console.error('Usage: feed rm <name>');
+      process.exit(1);
+    }
+    if (removeFeed(name)) {
+      console.log(`Removed feed "${name.toLowerCase()}".`);
+    } else {
+      console.error(`Feed "${name.toLowerCase()}" not found.`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // Fetch episodes — from URL or saved name
+  if (!sub) {
+    console.error('Usage: feed <url-or-name> [-n limit]');
+    console.error('       feed add <name> <url>');
+    console.error('       feed rm <name>');
+    console.error('       feed list');
+    process.exit(1);
+  }
+
+  let feedUrl;
+  if (isUrl(sub)) {
+    feedUrl = sub;
+  } else {
+    feedUrl = getFeedUrl(sub);
+    if (!feedUrl) {
+      console.error(`Feed "${sub}" not found. Use "feed list" to see saved feeds.`);
+      process.exit(1);
+    }
+  }
+
+  const { show, episodes } = await fetchFeed(feedUrl, { limit: argv.limit });
+
+  if (episodes.length === 0) {
+    console.log('No episodes found in this feed.');
+    return;
+  }
+
+  console.log(`\n${show.name}${show.author ? ` — ${show.author}` : ''}\n`);
+
+  const header = `${'Date'.padEnd(12)} ${'Mins'.padEnd(6)} ${'Episode'.padEnd(50)} URL`;
+  console.log(header);
+  console.log('─'.repeat(header.length));
+
+  for (const ep of episodes) {
+    const date = (ep.date || '—').padEnd(12);
+    const mins = (ep.duration != null ? String(ep.duration) : '—').padEnd(6);
+    const name = (ep.name || '').slice(0, 48).padEnd(50);
+    console.log(`${date} ${mins} ${name} ${ep.url}`);
+  }
+
+  console.log(`\n${episodes.length} episode(s). Use: transcribe <URL> to transcribe.`);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -352,6 +446,7 @@ async function main() {
     list: handleList,
     podcast: handlePodcast,
     episodes: handleEpisodes,
+    feed: handleFeed,
   };
 
   const cli = buildCli(handlers);

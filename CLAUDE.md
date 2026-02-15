@@ -8,9 +8,11 @@ transcribe.js                  Main entry point, command handlers
 ├── src/api/
 │   ├── assemblyai.js          Transcription with speaker diarization
 │   ├── openai.js              Speaker identification via structured output
-│   └── itunes.js              iTunes Search API (podcast discovery)
+│   ├── itunes.js              iTunes Search API (podcast discovery)
+│   └── rss.js                 RSS feed parser (private/paywalled podcasts)
 └── src/utils/
     ├── downloader.js          Audio download via yt-dlp (any URL)
+    ├── feeds.js               Saved feed URL storage (feeds.json)
     ├── formatters.js          Markdown, text, JSON output formatting
     ├── storage.js             SQLite metadata storage + queries
     └── validators.js          Audio file and format validation
@@ -30,7 +32,9 @@ transcribe.js                  Main entry point, command handlers
 | `src/utils/storage.js` | SQLite DB for transcript metadata + queries | Changing schema, adding query functions |
 | `src/utils/validators.js` | Input validation, format constants | Adding supported formats, changing validation |
 | `src/api/itunes.js` | iTunes podcast search + episode listing | Changing API params, adding podcast metadata |
+| `src/api/rss.js` | RSS feed fetch + parse (private feeds) | Changing XML parsing, adding feed metadata |
 | `src/utils/downloader.js` | Audio download via yt-dlp (any URL) | Changing download format, adding URL support |
+| `src/utils/feeds.js` | Saved feed URL storage (`feeds.json`) | Changing storage format, adding feed metadata |
 
 ## Transcript Database
 
@@ -117,6 +121,7 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - **`list` command** — query transcript history from the CLI with filters (channel, speaker, source type)
 - **`podcast` command** — search for podcasts by name via iTunes Search API (no auth required)
 - **`episodes` command** — list recent episodes for a podcast by iTunes ID, with direct audio URLs for transcription
+- **`feed` command** — fetch RSS feed episodes (supports saved private feeds with auth tokens in URL); saved feeds stored in `feeds.json` (gitignored)
 
 ## Dependencies
 
@@ -126,6 +131,7 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - `zod` — structured output schema
 - `yargs` — CLI parsing
 - `dotenv` — env vars from local `.env`
+- `fast-xml-parser` — RSS/XML feed parsing
 - `yt-dlp` — external binary for audio download (`brew install yt-dlp`)
 
 ## CLI Reference
