@@ -174,8 +174,8 @@ export function createOpenAIClient(apiKey) {
           });
 
           const result = completion.choices[0].message.parsed;
-          if (result.texts.length === 1) {
-            updated[idx] = { ...updated[idx], text: result.texts[0] };
+          if (result.texts.length > 0) {
+            updated[idx] = { ...updated[idx], text: result.texts.join('\n\n') };
           }
         } catch (error) {
           console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
