@@ -71,6 +71,35 @@ function sampleUtterances(utterances, maxTotal = 50) {
 }
 
 // ============================================================================
+// Text Chunking
+// ============================================================================
+
+/**
+ * Split text into chunks at sentence boundaries
+ * @param {string} text - Text to split
+ * @param {number} maxChars - Max characters per chunk
+ * @returns {string[]} Array of text chunks
+ */
+function chunkText(text, maxChars = 4000) {
+  if (text.length <= maxChars) return [text];
+
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxChars) {
+    let splitAt = remaining.lastIndexOf('. ', maxChars);
+    if (splitAt === -1 || splitAt < maxChars * 0.5) {
+      splitAt = maxChars;
+    } else {
+      splitAt += 1; // include the period
+    }
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
+// ============================================================================
 // Paragraph Breaking Helper
 // ============================================================================
 
@@ -224,22 +253,39 @@ export function createOpenAIClient(apiKey) {
       console.log(`   Breaking ${longEntries.length} long passage(s) into paragraphs...`);
 
       const results = await Promise.all(
-        longEntries.map(([, u]) => breakOnePassage(client, u.text).catch(error => {
-          console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
-          return { text: null, usage: null };
-        }))
+        longEntries.map(([, u]) => {
+          const chunks = chunkText(u.text);
+          return Promise.all(chunks.map(c => breakOnePassage(client, c).catch(error => {
+            console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
+            return { text: null, usage: null };
+          }))).then(chunkResults => {
+            const texts = chunkResults.map(r => r.text).filter(Boolean);
+            const usage = { prompt_tokens: 0, completion_tokens: 0 };
+            for (const r of chunkResults) {
+              if (r.usage) {
+                usage.prompt_tokens += r.usage.prompt_tokens;
+                usage.completion_tokens += r.usage.completion_tokens;
+              }
+            }
+            return { text: texts.join('\n\n'), usage };
+          });
+        })
       );
 
       const updated = [...utterances];
-      let totalIn = 0, totalOut = 0;
+      let totalIn = 0, totalOut = 0, totalCalls = 0;
       for (let i = 0; i < longEntries.length; i++) {
         const [idx] = longEntries[i];
         const { text, usage } = results[i];
         if (text) updated[idx] = { ...updated[idx], text };
-        if (usage) { totalIn += usage.prompt_tokens; totalOut += usage.completion_tokens; }
+        if (usage) {
+          totalIn += usage.prompt_tokens;
+          totalOut += usage.completion_tokens;
+          totalCalls += chunkText(longEntries[i][1].text).length;
+        }
       }
 
-      logUsage(`Paragraphs (${longEntries.length} calls, gpt-5-nano)`, 'gpt-5-nano',
+      logUsage(`Paragraphs (${totalCalls} calls, gpt-5-nano)`, 'gpt-5-nano',
         { prompt_tokens: totalIn, completion_tokens: totalOut });
       return updated;
     },

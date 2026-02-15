@@ -97,6 +97,29 @@ function initClients() {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Group sentences into segments of roughly maxChars characters each,
+ * preserving start/end timestamps from the first/last sentence in each group.
+ */
+function groupSentences(sentences, maxChars = 4000) {
+  const grouped = [];
+  let current = { speaker: sentences[0].speaker, text: '', start: sentences[0].start, end: 0 };
+  for (const s of sentences) {
+    if (current.text.length + s.text.length > maxChars && current.text.length > 0) {
+      grouped.push({ ...current });
+      current = { speaker: s.speaker, text: '', start: s.start, end: 0 };
+    }
+    current.text += (current.text ? ' ' : '') + s.text;
+    current.end = s.end;
+  }
+  if (current.text) grouped.push(current);
+  return grouped;
+}
+
+// ============================================================================
 // Command Handlers
 // ============================================================================
 
@@ -156,27 +179,17 @@ async function handleTranscribe(argv) {
     if (speakers.length === 1 && transcript.utterances.length > 0) {
       console.log('   Single speaker — fetching sentence segmentation...');
       const sentences = await assemblyai.getSentences(transcript.id);
-      const grouped = [];
-      let current = { speaker: sentences[0].speaker, text: '', start: sentences[0].start, end: 0 };
-      for (const s of sentences) {
-        if (current.text.length + s.text.length > 4000 && current.text.length > 0) {
-          grouped.push({ ...current });
-          current = { speaker: s.speaker, text: '', start: s.start, end: 0 };
-        }
-        current.text += (current.text ? ' ' : '') + s.text;
-        current.end = s.end;
-      }
-      if (current.text) grouped.push(current);
-      transcript.utterances = grouped;
-      console.log(`   Grouped ${sentences.length} sentences into ${grouped.length} segment(s)`);
+      transcript.utterances = groupSentences(sentences);
+      console.log(`   Grouped ${sentences.length} sentences into ${transcript.utterances.length} segment(s)`);
     }
 
-    // Step 2: Identify speakers (if diarization enabled and OpenAI available)
+    // Step 2: Identify speakers + break into paragraphs (concurrent)
     let speakerMapping = [];
     let speakerReasoning = '';
+    let mappedUtterances;
 
     if (diarize && transcript.utterances.length > 0 && openai) {
-      console.log('\n🔍 Step 2/3: Identifying speakers...\n');
+      console.log('\n🔍 Step 2/3: Identifying speakers + formatting...\n');
 
       // Build combined context from source metadata + user-provided speakers
       const contextParts = [];
@@ -193,7 +206,12 @@ async function handleTranscribe(argv) {
         console.log(`   Using context: ${contextParts.length} source(s) (${combinedContext.length} chars)`);
       }
 
-      const identification = await openai.identifySpeakers(transcript.utterances, combinedContext);
+      // Run speaker ID and paragraph breaking concurrently — they're independent
+      const [identification, brokenUtterances] = await Promise.all([
+        openai.identifySpeakers(transcript.utterances, combinedContext),
+        openai.breakIntoParagraphs(transcript.utterances),
+      ]);
+
       speakerMapping = identification.speakers;
       speakerReasoning = identification.reasoning;
 
@@ -201,18 +219,19 @@ async function handleTranscribe(argv) {
         const label = s.label === s.name ? s.label : `${s.label} → ${s.name}`;
         console.log(`   ${label} (${s.confidence} confidence)`);
       }
-    } else if (diarize && !openai) {
-      console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
+
+      mappedUtterances = mapSpeakerNames(brokenUtterances, speakerMapping);
     } else {
-      console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
-    }
+      if (diarize && !openai) {
+        console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
+      } else {
+        console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
+      }
 
-    // Apply speaker name mapping
-    let mappedUtterances = mapSpeakerNames(transcript.utterances, speakerMapping);
-
-    // Break long utterances into paragraphs
-    if (openai) {
-      mappedUtterances = await openai.breakIntoParagraphs(mappedUtterances);
+      mappedUtterances = transcript.utterances;
+      if (openai) {
+        mappedUtterances = await openai.breakIntoParagraphs(mappedUtterances);
+      }
     }
 
     // Step 3: Format and save output
