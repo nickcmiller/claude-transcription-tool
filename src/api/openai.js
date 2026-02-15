@@ -26,6 +26,22 @@ const ParagraphsSchema = z.object({
 });
 
 // ============================================================================
+// Pricing & Usage Logging
+// ============================================================================
+
+const MODEL_PRICING = {
+  'gpt-5':      { input: 1.25, output: 10.00 },
+  'gpt-5-nano': { input: 0.05, output: 0.40 },
+};
+
+function logUsage(label, model, usage) {
+  if (!usage) return;
+  const pricing = MODEL_PRICING[model] || {};
+  const cost = (usage.prompt_tokens * (pricing.input || 0) + usage.completion_tokens * (pricing.output || 0)) / 1_000_000;
+  console.log(`   ${label}: ${usage.prompt_tokens} in / ${usage.completion_tokens} out → $${cost.toFixed(4)}`);
+}
+
+// ============================================================================
 // Sampling
 // ============================================================================
 
@@ -52,6 +68,62 @@ function sampleUtterances(utterances, maxTotal = 50) {
   const end = utterances.slice(-endCount);
 
   return [...beginning, ...middle, ...end];
+}
+
+// ============================================================================
+// Paragraph Breaking Helper
+// ============================================================================
+
+async function breakOnePassage(client, text) {
+  const completion = await client.beta.chat.completions.parse({
+    model: 'gpt-5-nano',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a text formatter. Split long spoken passages into paragraphs for readability. Preserve the exact wording.',
+      },
+      {
+        role: 'user',
+        content: [
+          'Split this long spoken passage into paragraphs at natural topic shifts.',
+          'Rules:',
+          '- Preserve exact wording — only split into chunks',
+          '- 3-6 sentences per paragraph (aim for 200-500 characters each)',
+          '- Fewer, larger paragraphs are better',
+          '',
+          text,
+        ].join('\n'),
+      },
+    ],
+    response_format: zodResponseFormat(ParagraphsSchema, 'paragraphs'),
+  });
+
+  const result = completion.choices[0].message.parsed;
+  if (result.texts.length === 0) return { text: null, usage: completion.usage };
+
+  // Merge any overly-short paragraphs (< 150 chars) with the next one
+  const merged = [];
+  let buffer = '';
+  for (const chunk of result.texts) {
+    if (buffer) {
+      buffer += ' ' + chunk;
+    } else {
+      buffer = chunk;
+    }
+    if (buffer.length >= 150) {
+      merged.push(buffer);
+      buffer = '';
+    }
+  }
+  if (buffer) {
+    if (merged.length > 0) {
+      merged[merged.length - 1] += ' ' + buffer;
+    } else {
+      merged.push(buffer);
+    }
+  }
+
+  return { text: merged.join('\n\n'), usage: completion.usage };
 }
 
 // ============================================================================
@@ -111,6 +183,7 @@ export function createOpenAIClient(apiKey) {
         });
 
         const result = completion.choices[0].message.parsed;
+        logUsage('Speaker ID (gpt-5)', 'gpt-5', completion.usage);
         return result;
       } catch (error) {
         console.warn(`Speaker identification failed: ${error.message}`);
@@ -130,80 +203,39 @@ export function createOpenAIClient(apiKey) {
 
     /**
      * Break long utterances into paragraphs for readability.
-     * Processes each qualifying utterance individually.
+     * Processes qualifying utterances concurrently via Promise.all.
      * @param {Array} utterances - Array of { speaker, text, ... } objects
      * @param {object} [opts]
      * @param {number} [opts.threshold=1500] - Char count above which to paragraph-break
      * @returns {Array} Utterances with long texts broken into paragraphs
      */
     async breakIntoParagraphs(utterances, { threshold = 1500 } = {}) {
-      const longIndices = [];
-      for (let i = 0; i < utterances.length; i++) {
-        if (utterances[i].text.length > threshold) {
-          longIndices.push(i);
-        }
-      }
+      const longEntries = utterances
+        .map((u, i) => [i, u])
+        .filter(([, u]) => u.text.length > threshold);
 
-      if (longIndices.length === 0) return utterances;
+      if (longEntries.length === 0) return utterances;
 
-      console.log(`   Breaking ${longIndices.length} long passage(s) into paragraphs...`);
-      const updated = [...utterances];
+      console.log(`   Breaking ${longEntries.length} long passage(s) into paragraphs...`);
 
-      for (const idx of longIndices) {
-        try {
-          const completion = await client.beta.chat.completions.parse({
-            model: 'gpt-5-nano',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a text formatter. Split long spoken passages into paragraphs for readability. Preserve the exact wording.',
-              },
-              {
-                role: 'user',
-                content: [
-                  'Split this long spoken passage into paragraphs at natural topic shifts.',
-                  'Rules:',
-                  '- Preserve exact wording — only split into chunks',
-                  '- 3-6 sentences per paragraph (aim for 200-500 characters each)',
-                  '- Fewer, larger paragraphs are better',
-                  '',
-                  updated[idx].text,
-                ].join('\n'),
-              },
-            ],
-            response_format: zodResponseFormat(ParagraphsSchema, 'paragraphs'),
-          });
-
-          const result = completion.choices[0].message.parsed;
-          if (result.texts.length > 0) {
-            // Merge any overly-short paragraphs (< 150 chars) with the next one
-            const merged = [];
-            let buffer = '';
-            for (const chunk of result.texts) {
-              if (buffer) {
-                buffer += ' ' + chunk;
-              } else {
-                buffer = chunk;
-              }
-              if (buffer.length >= 150) {
-                merged.push(buffer);
-                buffer = '';
-              }
-            }
-            if (buffer) {
-              if (merged.length > 0) {
-                merged[merged.length - 1] += ' ' + buffer;
-              } else {
-                merged.push(buffer);
-              }
-            }
-            updated[idx] = { ...updated[idx], text: merged.join('\n\n') };
-          }
-        } catch (error) {
+      const results = await Promise.all(
+        longEntries.map(([, u]) => breakOnePassage(client, u.text).catch(error => {
           console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
-        }
+          return { text: null, usage: null };
+        }))
+      );
+
+      const updated = [...utterances];
+      let totalIn = 0, totalOut = 0;
+      for (let i = 0; i < longEntries.length; i++) {
+        const [idx] = longEntries[i];
+        const { text, usage } = results[i];
+        if (text) updated[idx] = { ...updated[idx], text };
+        if (usage) { totalIn += usage.prompt_tokens; totalOut += usage.completion_tokens; }
       }
 
+      logUsage(`Paragraphs (${longEntries.length} calls, gpt-5-nano)`, 'gpt-5-nano',
+        { prompt_tokens: totalIn, completion_tokens: totalOut });
       return updated;
     },
   };
