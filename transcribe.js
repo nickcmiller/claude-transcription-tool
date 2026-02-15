@@ -119,6 +119,32 @@ function groupSentences(sentences, maxChars = 4000) {
   return grouped;
 }
 
+/**
+ * Split long multi-speaker utterances using sentence segmentation.
+ * Short utterances pass through unchanged. Long ones are replaced by
+ * sentence-grouped chunks that keep the original speaker and start timestamp.
+ */
+function splitLongUtterances(utterances, sentences, threshold = 4000) {
+  const result = [];
+  for (const u of utterances) {
+    if (u.text.length <= threshold) {
+      result.push(u);
+      continue;
+    }
+    // Find sentences that belong to this utterance by timestamp overlap
+    const uSentences = sentences.filter(s => s.start >= u.start && s.end <= u.end);
+    if (uSentences.length === 0) {
+      result.push(u);
+      continue;
+    }
+    const groups = groupSentences(uSentences, threshold);
+    for (const g of groups) {
+      result.push({ ...u, text: g.text, start: g.start, end: g.end });
+    }
+  }
+  return result;
+}
+
 // ============================================================================
 // Command Handlers
 // ============================================================================
@@ -174,12 +200,21 @@ async function handleTranscribe(argv) {
       console.log(`   ${speakers.length} speaker(s) detected: ${speakers.join(', ')}`);
     }
 
-    // For single-speaker transcripts, replace the one giant utterance with
-    // sentence-grouped segments so paragraph breaking gets manageable chunks
-    if (speakers.length === 1 && transcript.utterances.length > 0) {
-      console.log('   Single speaker — fetching sentence segmentation...');
+    // Split long utterances using AssemblyAI sentence segmentation
+    const CHUNK_THRESHOLD = 4000;
+    const hasLongUtterances = transcript.utterances.some(u => u.text.length > CHUNK_THRESHOLD);
+
+    if (hasLongUtterances) {
+      console.log('   Fetching sentence segmentation for long utterance(s)...');
       const sentences = await assemblyai.getSentences(transcript.id);
-      transcript.utterances = groupSentences(sentences);
+
+      if (speakers.length === 1) {
+        // Single speaker: group all sentences into timestamped segments
+        transcript.utterances = groupSentences(sentences);
+      } else {
+        // Multi-speaker: replace only the long utterances with sentence-grouped chunks
+        transcript.utterances = splitLongUtterances(transcript.utterances, sentences, CHUNK_THRESHOLD);
+      }
       console.log(`   Grouped ${sentences.length} sentences into ${transcript.utterances.length} segment(s)`);
     }
 

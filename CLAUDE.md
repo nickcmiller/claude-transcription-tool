@@ -18,7 +18,7 @@ transcribe.js                  Main entry point, command handlers
     └── validators.js          Audio file and format validation
 ```
 
-**Data flow**: CLI args → handler → [yt-dlp if URL] → AssemblyAI (transcribe + diarize) → [sentence grouping if single speaker] → OpenAI (identify speakers + paragraph breaking, concurrent) → formatters → console output + file save → SQLite metadata save
+**Data flow**: CLI args → handler → [yt-dlp if URL] → AssemblyAI (transcribe + diarize) → [sentence segmentation for long utterances] → OpenAI (identify speakers + paragraph breaking, concurrent) → formatters → console output + file save → SQLite metadata save
 
 ## Component Responsibilities
 
@@ -121,8 +121,8 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - **OpenAI structured output** via `client.beta.chat.completions.parse()` with Zod schema
 - **Models**: `gpt-5` for multi-speaker identification, `gpt-5-mini` for single-speaker identification, `gpt-5-nano` for paragraph breaking
 - **OpenAI is optional** — tool works without it, just skips speaker identification and paragraph breaking. If the API errors or context limit is exceeded, falls back gracefully.
-- **Single-speaker handling** — when only 1 speaker is detected, fetches AssemblyAI sentence segmentation and groups sentences into ~4000-char segments with timestamps. Uses gpt-5-mini (cheaper) for speaker ID instead of gpt-5.
-- **Paragraph breaking** — utterances over 1500 chars are sent to gpt-5-nano to insert `\n\n` at natural boundaries. Long passages are chunked at sentence boundaries (~4000 chars) before sending to avoid context limits. Runs automatically when OpenAI is available.
+- **Long utterance handling** — any utterance over 4000 chars triggers AssemblyAI sentence segmentation (free). Single-speaker: all sentences grouped into ~4000-char timestamped segments. Multi-speaker: only long utterances are split at sentence boundaries, short ones pass through unchanged. Uses gpt-5-mini (cheaper) for single-speaker ID instead of gpt-5.
+- **Paragraph breaking** — utterances over 1500 chars are sent to gpt-5-nano to insert `\n\n` at natural boundaries. Runs automatically when OpenAI is available. Long utterances are pre-chunked by the orchestrator via sentence segmentation, so each passage sent to the model is already ~4000 chars or less.
 - **Concurrent processing** — speaker identification and paragraph breaking run in parallel via Promise.all since they're independent.
 - **Cost logging** — all paid API calls (AssemblyAI, OpenAI) log duration/token usage and estimated cost to stdout.
 - **URL support** via yt-dlp — works with any yt-dlp-supported URL (YouTube, podcasts, etc.), downloads audio to temp file, cleans up after
