@@ -121,7 +121,7 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - **OpenAI structured output** via `client.beta.chat.completions.parse()` with Zod schema
 - **Model**: `gpt-5-nano` for speaker identification (cheapest with structured output)
 - **OpenAI is optional** — tool works without it, just skips speaker identification and paragraph breaking. If the API errors or context limit is exceeded, falls back gracefully.
-- **Paragraph breaking** — utterances over 2500 chars are sent to gpt-5-nano to insert `\n\n` at natural boundaries. Batched into one API call. Runs automatically when OpenAI is available.
+- **Paragraph breaking** — utterances over 1500 chars are sent to gpt-5-nano to insert `\n\n` at natural boundaries (one call per passage). Runs automatically when OpenAI is available.
 - **URL support** via yt-dlp — works with any yt-dlp-supported URL (YouTube, podcasts, etc.), downloads audio to temp file, cleans up after
 - **URL deduplication** — warns and exits if a URL was already transcribed; use `--force` to override
 - **File collision handling** — auto-appends `(2)`, `(3)`, etc. if output file already exists

@@ -133,10 +133,10 @@ export function createOpenAIClient(apiKey) {
      * Processes each qualifying utterance individually.
      * @param {Array} utterances - Array of { speaker, text, ... } objects
      * @param {object} [opts]
-     * @param {number} [opts.threshold=2500] - Char count above which to paragraph-break
+     * @param {number} [opts.threshold=1500] - Char count above which to paragraph-break
      * @returns {Array} Utterances with long texts broken into paragraphs
      */
-    async breakIntoParagraphs(utterances, { threshold = 2500 } = {}) {
+    async breakIntoParagraphs(utterances, { threshold = 1500 } = {}) {
       const longIndices = [];
       for (let i = 0; i < utterances.length; i++) {
         if (utterances[i].text.length > threshold) {
@@ -164,7 +164,7 @@ export function createOpenAIClient(apiKey) {
                   'Insert paragraph breaks (\\n\\n) into this long spoken passage at natural topic or thought boundaries.',
                   'Rules:',
                   '- Do NOT change any wording, only insert \\n\\n between sentences',
-                  '- Aim for paragraphs of 3-6 sentences each',
+                  '- Aim for paragraphs of 3-5 sentences, but fewer or more is fine',
                   '',
                   updated[idx].text,
                 ].join('\n'),
