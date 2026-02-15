@@ -31,6 +31,7 @@ const ParagraphsSchema = z.object({
 
 const MODEL_PRICING = {
   'gpt-5':      { input: 1.25, output: 10.00 },
+  'gpt-5-mini': { input: 0.25, output: 2.00 },
   'gpt-5-nano': { input: 0.05, output: 0.40 },
 };
 
@@ -181,7 +182,7 @@ export function createOpenAIClient(apiKey) {
 
       const uniqueSpeakers = [...new Set(utterances.map(u => u.speaker))];
       const singleSpeaker = uniqueSpeakers.length === 1;
-      const model = singleSpeaker ? 'gpt-5-nano' : 'gpt-5';
+      const model = singleSpeaker ? 'gpt-5-mini' : 'gpt-5';
 
       // For single speaker, short excerpt + metadata is enough; for multi, sample broadly
       let excerpt;
