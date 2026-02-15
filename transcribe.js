@@ -4,20 +4,23 @@
  * Audio Transcription Tool
  *
  * DESCRIPTION:
- *   Transcribes audio files or YouTube URLs using AssemblyAI with speaker
- *   diarization, then identifies speakers using OpenAI structured output.
- *   Outputs Obsidian-friendly markdown, plain text, or JSON.
+ *   Transcribes audio files or URLs (YouTube, podcasts, etc.) using AssemblyAI
+ *   with speaker diarization, then identifies speakers using OpenAI structured
+ *   output. Outputs Obsidian-friendly markdown, plain text, or JSON.
  *   Saves transcript metadata to SQLite at ../transcription-data/transcription.db.
  *
  * USAGE:
  *   node .scripts/transcription/transcribe.js transcribe <audio-file-or-url> [options]
+ *   node .scripts/transcription/transcribe.js list [options]
  *
  * EXAMPLES:
  *   node .scripts/transcription/transcribe.js transcribe recording.mp3
  *   node .scripts/transcription/transcribe.js transcribe meeting.m4a -s "Meeting between Nick and Sarah"
  *   node .scripts/transcription/transcribe.js transcribe https://youtube.com/watch?v=xxx
+ *   node .scripts/transcription/transcribe.js transcribe https://podcast-host.com/episode.mp3
  *   node .scripts/transcription/transcribe.js transcribe call.wav -o "Resources/Meetings/call.md"
  *   node .scripts/transcription/transcribe.js transcribe lecture.mp3 --no-diarize --format text
+ *   node .scripts/transcription/transcribe.js list --channel Dwarkesh -n 10
  *
  * OUTPUT:
  *   - Markdown/text/JSON file → Resources/Transcripts/ (or custom -o path)
@@ -37,7 +40,7 @@ import { buildCli } from './src/cli/config.js';
 import { createAssemblyAIClient } from './src/api/assemblyai.js';
 import { createOpenAIClient } from './src/api/openai.js';
 import { validateAudioFile } from './src/utils/validators.js';
-import { isYouTubeUrl, downloadYouTubeAudio } from './src/utils/youtube.js';
+import { isUrl, isYouTubeUrl, downloadAudio } from './src/utils/downloader.js';
 import {
   mapSpeakerNames,
   formatMarkdown,
@@ -45,7 +48,7 @@ import {
   formatJson,
   printConsoleOutput,
 } from './src/utils/formatters.js';
-import { saveTranscript, DATA_DIR } from './src/utils/storage.js';
+import { saveTranscript, findBySourceUrl, listTranscripts } from './src/utils/storage.js';
 
 // ============================================================================
 // Environment Setup
@@ -57,6 +60,9 @@ dotenv.config({ path: join(__dirname, '.env') });
 
 // Vault root is two levels up from .scripts/transcription/
 const VAULT_ROOT = resolve(__dirname, '..', '..');
+
+// Data directory: sibling to vault, like readwise-data/
+const DATA_DIR = resolve(VAULT_ROOT, '..', 'transcription-data');
 
 /**
  * Validate environment and create API clients (deferred so --help works without keys)
@@ -93,156 +99,199 @@ async function handleTranscribe(argv) {
   const speakerContext = argv.speakers || '';
   const format = argv.format;
 
-  // Step 0: Resolve input — YouTube URL or local file
-  let audioFile;
-  let youtubeTitle = null;
-  let cleanup = null;
+  // Step 0: Resolve input — URL or local file
+  let sourceInfo;
 
-  let youtubeDescription = null;
-  let youtubeUploader = null;
-  let youtubeChannelUrl = null;
-  let youtubeRawMetadata = null;
+  if (isUrl(input)) {
+    // Check for duplicate URL (unless --force)
+    if (!argv.force) {
+      const existing = findBySourceUrl(DATA_DIR, input);
+      if (existing) {
+        console.error(`\n⚠️  This URL was already transcribed:`);
+        console.error(`   Title: ${existing.title}`);
+        console.error(`   Date:  ${existing.created_at}`);
+        console.error(`\n   Use --force to re-transcribe.`);
+        process.exit(1);
+      }
+    }
 
-  if (isYouTubeUrl(input)) {
-    console.log('\n🎬 Downloading YouTube audio...\n');
-    const download = await downloadYouTubeAudio(input);
-    audioFile = download.filePath;
-    youtubeTitle = download.title;
-    youtubeDescription = download.description;
-    youtubeUploader = download.uploader;
-    youtubeChannelUrl = download.channelUrl;
-    youtubeRawMetadata = download.rawMetadata;
-    cleanup = download.cleanup;
-    console.log(`   Saved to temp: ${audioFile}`);
+    const label = isYouTubeUrl(input) ? 'YouTube' : 'URL';
+    console.log(`\n🎬 Downloading ${label} audio...\n`);
+    const download = await downloadAudio(input);
+    sourceInfo = { ...download, isUrl: true };
+    console.log(`   Saved to temp: ${sourceInfo.filePath}`);
   } else {
-    audioFile = resolve(input);
-    validateAudioFile(audioFile);
+    sourceInfo = { filePath: resolve(input), cleanup: null, isUrl: false };
+    validateAudioFile(sourceInfo.filePath);
   }
 
   try {
-  // Step 1: Transcribe with AssemblyAI
-  console.log('\n📝 Step 1/3: Transcribing audio...\n');
-  const transcript = await assemblyai.transcribe(audioFile, { diarize });
+    // Step 1: Transcribe with AssemblyAI
+    console.log('\n📝 Step 1/3: Transcribing audio...\n');
+    const transcript = await assemblyai.transcribe(sourceInfo.filePath, { diarize });
 
-  console.log(`\n✅ Transcription complete (${Math.round(transcript.audioDuration)}s audio)`);
-  if (transcript.utterances.length > 0) {
-    const speakers = [...new Set(transcript.utterances.map(u => u.speaker))];
-    console.log(`   ${speakers.length} speaker(s) detected: ${speakers.join(', ')}`);
-  }
-
-  // Step 3: Identify speakers (if diarization enabled and OpenAI available)
-  let speakerMapping = [];
-  let speakerReasoning = '';
-
-  if (diarize && transcript.utterances.length > 0 && openai) {
-    console.log('\n🔍 Step 2/3: Identifying speakers...\n');
-
-    // Build combined context from YouTube metadata + user-provided speakers
-    const contextParts = [];
-    if (youtubeTitle) contextParts.push(`Video title: ${youtubeTitle}`);
-    if (youtubeUploader) contextParts.push(`Channel: ${youtubeUploader}`);
-    if (youtubeDescription) {
-      const truncated = youtubeDescription.slice(0, 1000);
-      contextParts.push(`Video description: ${truncated}`);
-    }
-    if (speakerContext) contextParts.push(`Additional context: ${speakerContext}`);
-    const combinedContext = contextParts.join('\n');
-
-    if (contextParts.length > 0) {
-      console.log(`   Using context: ${contextParts.length} source(s) (${combinedContext.length} chars)`);
+    console.log(`\n✅ Transcription complete (${Math.round(transcript.audioDuration)}s audio)`);
+    if (transcript.utterances.length > 0) {
+      const speakers = [...new Set(transcript.utterances.map(u => u.speaker))];
+      console.log(`   ${speakers.length} speaker(s) detected: ${speakers.join(', ')}`);
     }
 
-    const identification = await openai.identifySpeakers(transcript.utterances, combinedContext);
-    speakerMapping = identification.speakers;
-    speakerReasoning = identification.reasoning;
+    // Step 2: Identify speakers (if diarization enabled and OpenAI available)
+    let speakerMapping = [];
+    let speakerReasoning = '';
 
-    for (const s of speakerMapping) {
-      const label = s.label === s.name ? s.label : `${s.label} → ${s.name}`;
-      console.log(`   ${label} (${s.confidence} confidence)`);
+    if (diarize && transcript.utterances.length > 0 && openai) {
+      console.log('\n🔍 Step 2/3: Identifying speakers...\n');
+
+      // Build combined context from source metadata + user-provided speakers
+      const contextParts = [];
+      if (sourceInfo.title) contextParts.push(`Video title: ${sourceInfo.title}`);
+      if (sourceInfo.uploader) contextParts.push(`Channel: ${sourceInfo.uploader}`);
+      if (sourceInfo.description) {
+        const truncated = sourceInfo.description.slice(0, 1000);
+        contextParts.push(`Video description: ${truncated}`);
+      }
+      if (speakerContext) contextParts.push(`Additional context: ${speakerContext}`);
+      const combinedContext = contextParts.join('\n');
+
+      if (contextParts.length > 0) {
+        console.log(`   Using context: ${contextParts.length} source(s) (${combinedContext.length} chars)`);
+      }
+
+      const identification = await openai.identifySpeakers(transcript.utterances, combinedContext);
+      speakerMapping = identification.speakers;
+      speakerReasoning = identification.reasoning;
+
+      for (const s of speakerMapping) {
+        const label = s.label === s.name ? s.label : `${s.label} → ${s.name}`;
+        console.log(`   ${label} (${s.confidence} confidence)`);
+      }
+    } else if (diarize && !openai) {
+      console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
+    } else {
+      console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
     }
-  } else if (diarize && !openai) {
-    console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
-  } else {
-    console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
-  }
 
-  // Apply speaker name mapping
-  const mappedUtterances = mapSpeakerNames(transcript.utterances, speakerMapping);
+    // Apply speaker name mapping
+    const mappedUtterances = mapSpeakerNames(transcript.utterances, speakerMapping);
 
-  // Step 4: Format and save output
-  console.log('\n💾 Step 3/3: Saving output...\n');
+    // Step 3: Format and save output
+    console.log('\n💾 Step 3/3: Saving output...\n');
 
-  // Use YouTube title if available, otherwise derive from file path
-  const sourceFilename = youtubeTitle
-    ? youtubeTitle.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 100)
-    : basename(audioFile, extname(audioFile));
-  const metadata = {
-    audioDuration: transcript.audioDuration,
-    transcriptId: transcript.id,
-    speakerReasoning,
-    ...(youtubeTitle ? { sourceUrl: input, youtubeTitle } : {}),
-  };
+    // Use source title if available, otherwise derive from file path
+    const sourceFilename = sourceInfo.title
+      ? sourceInfo.title.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 100)
+      : basename(sourceInfo.filePath, extname(sourceInfo.filePath));
+    const speakerNames = speakerMapping.map(s => s.name);
+    const metadata = {
+      audioDuration: transcript.audioDuration,
+      transcriptId: transcript.id,
+      speakerReasoning,
+      speakers: speakerNames,
+      ...(sourceInfo.isUrl ? { sourceUrl: input, sourceTitle: sourceInfo.title } : {}),
+    };
 
-  let content;
-  let outputExt;
-  if (format === 'json') {
-    content = formatJson(sourceFilename, mappedUtterances, transcript.text, metadata);
-    outputExt = '.json';
-  } else if (format === 'text') {
-    content = formatText(mappedUtterances, transcript.text);
-    outputExt = '.txt';
-  } else {
-    content = formatMarkdown(sourceFilename, mappedUtterances, transcript.text, metadata);
-    outputExt = '.md';
-  }
-
-  // Determine output path
-  let outputPath;
-  if (argv.output) {
-    outputPath = resolve(VAULT_ROOT, argv.output);
-  } else {
-    const transcriptsDir = join(VAULT_ROOT, 'Resources', 'Transcripts');
-    if (!existsSync(transcriptsDir)) {
-      mkdirSync(transcriptsDir, { recursive: true });
+    let content;
+    let outputExt;
+    if (format === 'json') {
+      content = formatJson(sourceFilename, mappedUtterances, transcript.text, metadata);
+      outputExt = '.json';
+    } else if (format === 'text') {
+      content = formatText(mappedUtterances, transcript.text);
+      outputExt = '.txt';
+    } else {
+      content = formatMarkdown(sourceFilename, mappedUtterances, transcript.text, metadata);
+      outputExt = '.md';
     }
-    outputPath = join(transcriptsDir, `${sourceFilename}${outputExt}`);
-  }
 
-  // Ensure parent directory exists
-  const outputDir = dirname(outputPath);
-  if (!existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
-  }
+    // Determine output path
+    let outputPath;
+    if (argv.output) {
+      outputPath = resolve(VAULT_ROOT, argv.output);
+    } else {
+      const transcriptsDir = join(VAULT_ROOT, 'Resources', 'Transcripts');
+      if (!existsSync(transcriptsDir)) {
+        mkdirSync(transcriptsDir, { recursive: true });
+      }
+      outputPath = join(transcriptsDir, `${sourceFilename}${outputExt}`);
+    }
 
-  writeFileSync(outputPath, content, 'utf-8');
-  console.log(`   Saved to: ${outputPath}`);
+    // Ensure parent directory exists
+    const outputDir = dirname(outputPath);
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true });
+    }
 
-  // Save transcript metadata to database
-  const isYouTube = isYouTubeUrl(input);
-  saveTranscript(DATA_DIR, {
-    id: transcript.id,
-    source_url: isYouTube ? input : null,
-    source_type: isYouTube ? 'youtube' : 'local',
-    title: sourceFilename,
-    description: youtubeDescription,
-    channel: youtubeUploader,
-    channel_url: youtubeChannelUrl,
-    duration_seconds: transcript.audioDuration,
-    speakers: JSON.stringify(speakerMapping.map(s => s.name)),
-    file_path: relative(VAULT_ROOT, outputPath),
-    created_at: new Date().toISOString(),
-    raw_metadata: youtubeRawMetadata,
-    content: content,
-  });
+    // Handle file collisions — append (2), (3), etc. if file exists
+    if (existsSync(outputPath)) {
+      const base = basename(outputPath, outputExt);
+      let counter = 2;
+      while (existsSync(join(outputDir, `${base} (${counter})${outputExt}`))) {
+        counter++;
+      }
+      outputPath = join(outputDir, `${base} (${counter})${outputExt}`);
+    }
 
-  // Console preview
-  printConsoleOutput(mappedUtterances, transcript.text);
+    writeFileSync(outputPath, content, 'utf-8');
+    console.log(`   Saved to: ${outputPath}`);
 
-  console.log('\n✅ Done!');
+    // Save transcript metadata to database
+    saveTranscript(DATA_DIR, {
+      id: transcript.id,
+      source_url: sourceInfo.isUrl ? input : null,
+      source_type: sourceInfo.isUrl ? (isYouTubeUrl(input) ? 'youtube' : 'url') : 'local',
+      title: sourceFilename,
+      description: sourceInfo.description || null,
+      channel: sourceInfo.uploader || null,
+      channel_url: sourceInfo.channelUrl || null,
+      duration_seconds: transcript.audioDuration,
+      speakers: JSON.stringify(speakerNames),
+      file_path: relative(VAULT_ROOT, outputPath),
+      created_at: new Date().toISOString(),
+      raw_metadata: sourceInfo.rawMetadata || null,
+      content: content,
+    });
+
+    // Console preview
+    printConsoleOutput(mappedUtterances, transcript.text);
+
+    console.log('\n✅ Done!');
 
   } finally {
-    if (cleanup) cleanup();
+    if (sourceInfo.cleanup) sourceInfo.cleanup();
   }
+}
+
+async function handleList(argv) {
+  const rows = listTranscripts(DATA_DIR, {
+    channel: argv.channel,
+    speaker: argv.speaker,
+    sourceType: argv.sourceType,
+    limit: argv.limit,
+  });
+
+  if (rows.length === 0) {
+    console.log('No transcripts found.');
+    return;
+  }
+
+  // Print formatted table
+  const header = `${'Title'.padEnd(50)} ${'Channel'.padEnd(20)} ${'Type'.padEnd(8)} ${'Mins'.padEnd(6)} Date`;
+  console.log(header);
+  console.log('─'.repeat(header.length));
+
+  for (const row of rows) {
+    const title = (row.title || '').slice(0, 48).padEnd(50);
+    const channel = (row.channel || '—').slice(0, 18).padEnd(20);
+    const type = (row.source_type || '').padEnd(8);
+    const mins = row.duration_seconds
+      ? String(Math.round(row.duration_seconds / 60)).padEnd(6)
+      : '—'.padEnd(6);
+    const date = row.created_at ? row.created_at.split('T')[0] : '—';
+    console.log(`${title} ${channel} ${type} ${mins} ${date}`);
+  }
+
+  console.log(`\n${rows.length} transcript(s) shown.`);
 }
 
 // ============================================================================
@@ -252,6 +301,7 @@ async function handleTranscribe(argv) {
 async function main() {
   const handlers = {
     transcribe: handleTranscribe,
+    list: handleList,
   };
 
   const cli = buildCli(handlers);

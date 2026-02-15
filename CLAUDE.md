@@ -3,19 +3,19 @@
 ## Architecture
 
 ```
-transcribe.js                  Main entry point, command handler
+transcribe.js                  Main entry point, command handlers
 ├── src/cli/config.js          CLI commands and options (yargs)
 ├── src/api/
 │   ├── assemblyai.js          Transcription with speaker diarization
 │   └── openai.js              Speaker identification via structured output
 └── src/utils/
+    ├── downloader.js          Audio download via yt-dlp (any URL)
     ├── formatters.js          Markdown, text, JSON output formatting
-    ├── storage.js             SQLite metadata storage (transcript catalog)
-    ├── validators.js          Audio file and format validation
-    └── youtube.js             YouTube audio download via yt-dlp
+    ├── storage.js             SQLite metadata storage + queries
+    └── validators.js          Audio file and format validation
 ```
 
-**Data flow**: CLI args → handler → [yt-dlp if YouTube URL] → AssemblyAI (transcribe + diarize) → OpenAI (identify speakers) → formatters → console output + file save → SQLite metadata save
+**Data flow**: CLI args → handler → [yt-dlp if URL] → AssemblyAI (transcribe + diarize) → OpenAI (identify speakers) → formatters → console output + file save → SQLite metadata save
 
 ## Component Responsibilities
 
@@ -26,9 +26,9 @@ transcribe.js                  Main entry point, command handler
 | `src/api/assemblyai.js` | AssemblyAI SDK wrapper | Changing transcription config, adding features |
 | `src/api/openai.js` | Speaker ID via Zod structured output | Changing prompt, schema, or model |
 | `src/utils/formatters.js` | Output formatting (markdown, text, JSON) | Changing output format, adding new formats |
-| `src/utils/storage.js` | SQLite DB for transcript metadata | Changing schema, adding query functions |
+| `src/utils/storage.js` | SQLite DB for transcript metadata + queries | Changing schema, adding query functions |
 | `src/utils/validators.js` | Input validation, format constants | Adding supported formats, changing validation |
-| `src/utils/youtube.js` | YouTube download via yt-dlp | Changing download format, adding URL patterns |
+| `src/utils/downloader.js` | Audio download via yt-dlp (any URL) | Changing download format, adding URL support |
 
 ## Transcript Database
 
@@ -40,7 +40,7 @@ Metadata for every transcription is stored in a SQLite database at `../transcrip
 |--------|------|-------------|
 | `id` | TEXT PK | AssemblyAI transcript ID |
 | `source_url` | TEXT | YouTube/podcast URL (null for local files) |
-| `source_type` | TEXT | `'youtube'` or `'local'` |
+| `source_type` | TEXT | `'youtube'`, `'url'`, or `'local'` |
 | `title` | TEXT | Video/episode title or filename |
 | `description` | TEXT | Full video/episode description |
 | `channel` | TEXT | Uploader/channel/show name |
@@ -105,9 +105,14 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - **OpenAI structured output** via `client.beta.chat.completions.parse()` with Zod schema
 - **Model**: `gpt-5-nano` for speaker identification (cheapest with structured output)
 - **OpenAI is optional** — tool works without it, just skips speaker identification. If the API errors or context limit is exceeded, falls back to generic speaker labels gracefully.
-- **YouTube support** via yt-dlp — auto-detects YouTube URLs, downloads audio to temp file, cleans up after
+- **URL support** via yt-dlp — works with any yt-dlp-supported URL (YouTube, podcasts, etc.), downloads audio to temp file, cleans up after
+- **URL deduplication** — warns and exits if a URL was already transcribed; use `--force` to override
+- **File collision handling** — auto-appends `(2)`, `(3)`, etc. if output file already exists
+- **Utterance timestamps** — `[MM:SS]` prefix on each utterance in markdown and text output
+- **Speakers in frontmatter** — identified speaker names are included in markdown YAML frontmatter
 - **Default output**: `Resources/Transcripts/{filename}.md` in the vault
 - **Metadata + Content**: Every transcription saves a row to SQLite with source info, speakers, duration, file path, and the full transcript content (enables cross-tool workflows without reading vault files)
+- **`list` command** — query transcript history from the CLI with filters (channel, speaker, source type)
 
 ## Dependencies
 
@@ -117,7 +122,7 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 - `zod` — structured output schema
 - `yargs` — CLI parsing
 - `dotenv` — env vars from local `.env`
-- `yt-dlp` — external binary for YouTube download (`brew install yt-dlp`)
+- `yt-dlp` — external binary for audio download (`brew install yt-dlp`)
 
 ## CLI Reference
 

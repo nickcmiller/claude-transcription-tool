@@ -22,6 +22,35 @@ const SpeakerIdentificationSchema = z.object({
 });
 
 // ============================================================================
+// Sampling
+// ============================================================================
+
+/**
+ * Sample utterances from beginning, middle, and end for broader speaker coverage
+ * @param {Array} utterances - All utterances
+ * @param {number} maxTotal - Maximum total utterances to return
+ * @returns {Array} Sampled utterances
+ */
+function sampleUtterances(utterances, maxTotal = 50) {
+  if (utterances.length <= maxTotal) {
+    return utterances;
+  }
+
+  const beginCount = 20;
+  const midCount = 15;
+  const endCount = 15;
+
+  const beginning = utterances.slice(0, beginCount);
+
+  const midStart = Math.floor((utterances.length - midCount) / 2);
+  const middle = utterances.slice(midStart, midStart + midCount);
+
+  const end = utterances.slice(-endCount);
+
+  return [...beginning, ...middle, ...end];
+}
+
+// ============================================================================
 // Client
 // ============================================================================
 
@@ -45,9 +74,9 @@ export function createOpenAIClient(apiKey) {
         return { speakers: [], reasoning: 'No utterances provided' };
       }
 
-      // Build transcript excerpt for the prompt (first 50 utterances max)
-      const excerpt = utterances
-        .slice(0, 50)
+      // Sample utterances broadly (beginning, middle, end) for better speaker coverage
+      const sampled = sampleUtterances(utterances, 50);
+      const excerpt = sampled
         .map(u => `${u.speaker}: ${u.text}`)
         .join('\n');
 
@@ -58,6 +87,7 @@ export function createOpenAIClient(apiKey) {
         context ? `\nContext: ${context}` : '',
         `\nSpeakers to identify: ${uniqueSpeakers.join(', ')}`,
         `\nTranscript excerpt:\n${excerpt}`,
+        '\nThe excerpt contains samples from the beginning, middle, and end of the transcript.',
         '\nIdentify each speaker based on context clues in the conversation (introductions, names mentioned, roles discussed). If you cannot identify a speaker, keep their original label.',
       ].join('');
 

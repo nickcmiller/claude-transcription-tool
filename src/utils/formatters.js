@@ -3,6 +3,21 @@
  */
 
 // ============================================================================
+// Timestamp Helpers
+// ============================================================================
+
+/**
+ * Format milliseconds as [MM:SS]
+ */
+function formatTimestamp(ms) {
+  if (ms == null) return '';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `[${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}]`;
+}
+
+// ============================================================================
 // Speaker Name Mapping
 // ============================================================================
 
@@ -53,6 +68,12 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
   if (metadata.sourceUrl) {
     lines.push(`source: ${metadata.sourceUrl}`);
   }
+  if (metadata.speakers && metadata.speakers.length > 0) {
+    lines.push('speakers:');
+    for (const speaker of metadata.speakers) {
+      lines.push(`  - ${speaker}`);
+    }
+  }
   lines.push('---');
   lines.push('');
 
@@ -71,7 +92,8 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
     lines.push('## Transcript');
     lines.push('');
     for (const u of utterances) {
-      lines.push(`**${u.speaker}**: ${u.text}`);
+      const ts = formatTimestamp(u.start);
+      lines.push(`${ts} **${u.speaker}**: ${u.text}`);
       lines.push('');
     }
   } else {
@@ -89,7 +111,10 @@ export function formatMarkdown(filename, utterances, text, metadata = {}) {
  */
 export function formatText(utterances, text) {
   if (utterances && utterances.length > 0) {
-    return utterances.map(u => `${u.speaker}: ${u.text}`).join('\n');
+    return utterances.map(u => {
+      const ts = formatTimestamp(u.start);
+      return `${ts} ${u.speaker}: ${u.text}`;
+    }).join('\n');
   }
   return text || '';
 }

@@ -1,5 +1,5 @@
 /**
- * YouTube audio download via yt-dlp
+ * Audio download via yt-dlp (supports YouTube, podcasts, and any yt-dlp-supported URL)
  */
 
 import { execFile } from 'child_process';
@@ -20,7 +20,14 @@ const YOUTUBE_PATTERNS = [
 ];
 
 /**
- * Check if a string is a YouTube URL
+ * Check if a string is any URL (http:// or https://)
+ */
+export function isUrl(input) {
+  return /^https?:\/\//.test(input);
+}
+
+/**
+ * Check if a string is a YouTube URL (used for display messaging)
  */
 export function isYouTubeUrl(input) {
   return YOUTUBE_PATTERNS.some(p => p.test(input));
@@ -31,16 +38,17 @@ export function isYouTubeUrl(input) {
 // ============================================================================
 
 /**
- * Download audio from a YouTube URL using yt-dlp
- * @param {string} url - YouTube URL
+ * Download audio from a URL using yt-dlp
+ * Works with any yt-dlp-supported URL (YouTube, podcasts, etc.)
+ * @param {string} url - Media URL
  * @returns {Object} { filePath, title, description, uploader, channelUrl, rawMetadata, cleanup }
  */
-export async function downloadYouTubeAudio(url) {
+export async function downloadAudio(url) {
   // Check yt-dlp is installed
   await checkYtDlp();
 
-  // Get video metadata (title, description, uploader, channelUrl, rawMetadata) in one call
-  const metadata = await getVideoMetadata(url);
+  // Get media metadata (title, description, uploader, channelUrl, rawMetadata) in one call
+  const metadata = await getMediaMetadata(url);
   console.log(`   Video: ${metadata.title}`);
 
   // Download to temp directory as mp3
@@ -91,10 +99,10 @@ export async function downloadYouTubeAudio(url) {
 }
 
 /**
- * Get video metadata (title, description, uploader) from YouTube URL
+ * Get media metadata (title, description, uploader) from a URL
  * Uses --dump-json for a single request that returns all metadata
  */
-async function getVideoMetadata(url) {
+async function getMediaMetadata(url) {
   return new Promise((resolve) => {
     execFile('yt-dlp', [
       '--dump-json',
@@ -103,20 +111,20 @@ async function getVideoMetadata(url) {
       url,
     ], { timeout: 30000, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
       if (error) {
-        resolve({ title: 'Unknown Video', description: '', uploader: '', channelUrl: null, rawMetadata: null });
+        resolve({ title: 'Unknown Media', description: '', uploader: '', channelUrl: null, rawMetadata: null });
         return;
       }
       try {
         const data = JSON.parse(stdout);
         resolve({
-          title: data.title || 'Unknown Video',
+          title: data.title || 'Unknown Media',
           description: data.description || '',
           uploader: data.uploader || data.channel || '',
           channelUrl: data.channel_url || null,
           rawMetadata: stdout,
         });
       } catch {
-        resolve({ title: 'Unknown Video', description: '', uploader: '', channelUrl: null, rawMetadata: null });
+        resolve({ title: 'Unknown Media', description: '', uploader: '', channelUrl: null, rawMetadata: null });
       }
     });
   });

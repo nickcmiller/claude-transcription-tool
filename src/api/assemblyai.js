@@ -36,9 +36,17 @@ export function createAssemblyAIClient(apiKey) {
         throw new Error(`Transcription failed: ${transcript.error}`);
       }
 
+      // Include start/end timestamps (milliseconds) for each utterance
+      const utterances = (transcript.utterances || []).map(u => ({
+        speaker: u.speaker,
+        text: u.text,
+        start: u.start,
+        end: u.end,
+      }));
+
       return {
         text: transcript.text,
-        utterances: transcript.utterances || [],
+        utterances,
         audioDuration: transcript.audio_duration,
         id: transcript.id,
       };

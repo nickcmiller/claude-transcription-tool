@@ -73,6 +73,11 @@ export function buildCli(handlers) {
             type: 'boolean',
             default: false,
           })
+          .option('force', {
+            describe: 'Re-transcribe even if URL was already transcribed',
+            type: 'boolean',
+            default: false,
+          })
           .example('$0 transcribe recording.mp3', 'Basic transcription with diarization')
           .example('$0 transcribe meeting.m4a -s "Meeting between Nick and Sarah"', 'With speaker context')
           .example('$0 transcribe https://youtube.com/watch?v=xxx', 'Transcribe a YouTube video')
@@ -80,5 +85,41 @@ export function buildCli(handlers) {
           .example('$0 transcribe lecture.mp3 --no-diarize --format text', 'No diarization, plain text');
       },
       handlers.transcribe
+    )
+
+    // ============================================================================
+    // list command
+    // ============================================================================
+    .command(
+      ['list', 'ls'],
+      'List transcripts from the database',
+      (yargs) => {
+        return yargs
+          .option('channel', {
+            alias: 'c',
+            describe: 'Filter by channel name (partial match)',
+            type: 'string',
+          })
+          .option('speaker', {
+            describe: 'Filter by speaker name (partial match)',
+            type: 'string',
+          })
+          .option('source-type', {
+            alias: 't',
+            describe: 'Filter by source type',
+            type: 'string',
+            choices: ['youtube', 'url', 'local'],
+          })
+          .option('limit', {
+            alias: 'n',
+            describe: 'Maximum number of results',
+            type: 'number',
+            default: 20,
+          })
+          .example('$0 list', 'List recent transcripts')
+          .example('$0 list --channel Dwarkesh', 'Filter by channel')
+          .example('$0 list --source-type youtube -n 10', 'YouTube transcripts, last 10');
+      },
+      handlers.list
     );
 }

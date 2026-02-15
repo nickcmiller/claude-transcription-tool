@@ -5,24 +5,14 @@
 
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { join } from 'path';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 const DATABASE_FILE = 'transcription.db';
 const DATABASE_VERSION = 2;
-
-// Data directory: sibling to vault, like readwise-data/
-// __dirname is src/utils/ → five levels up reaches Documents/
-//   src/utils/ → src/ → transcription/ → .scripts/ → vault/ → Documents/
-export const DATA_DIR = resolve(__dirname, '..', '..', '..', '..', '..', 'transcription-data');
 
 // ============================================================================
 // Database Connection Management
@@ -122,6 +112,53 @@ function initializeSchema(db) {
 
   // Set or update schema version
   db.prepare('INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)').run('db_version', String(DATABASE_VERSION));
+}
+
+// ============================================================================
+// Transcript Queries
+// ============================================================================
+
+/**
+ * Find an existing transcript by source URL
+ * @param {string} dataDir - Data directory path
+ * @param {string} url - Source URL to search for
+ * @returns {Object|null} Transcript record or null
+ */
+export function findBySourceUrl(dataDir, url) {
+  const db = getDb(dataDir);
+  return db.prepare('SELECT id, title, created_at FROM transcripts WHERE source_url = ?').get(url) || null;
+}
+
+/**
+ * List transcripts with optional filters
+ * @param {string} dataDir - Data directory path
+ * @param {Object} filters - Optional filters { channel, speaker, limit, sourceType }
+ * @returns {Array} Array of transcript records
+ */
+export function listTranscripts(dataDir, { channel, speaker, limit = 20, sourceType } = {}) {
+  const db = getDb(dataDir);
+
+  const conditions = [];
+  const params = [];
+
+  if (channel) {
+    conditions.push('channel LIKE ?');
+    params.push(`%${channel}%`);
+  }
+  if (speaker) {
+    conditions.push('speakers LIKE ?');
+    params.push(`%${speaker}%`);
+  }
+  if (sourceType) {
+    conditions.push('source_type = ?');
+    params.push(sourceType);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const sql = `SELECT title, channel, source_type, duration_seconds, created_at FROM transcripts ${where} ORDER BY created_at DESC LIMIT ?`;
+  params.push(limit);
+
+  return db.prepare(sql).all(...params);
 }
 
 // ============================================================================
