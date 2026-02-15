@@ -156,15 +156,18 @@ export function createOpenAIClient(apiKey) {
             messages: [
               {
                 role: 'system',
-                content: 'You are a text formatter. Insert paragraph breaks into long spoken passages to improve readability. Never alter the wording.',
+                content: 'You are a text formatter. Insert paragraph breaks into long spoken passages to improve readability. Never alter the wording. Each paragraph MUST contain multiple sentences — never put a single sentence alone.',
               },
               {
                 role: 'user',
                 content: [
-                  'Insert paragraph breaks (\\n\\n) into this long spoken passage at natural topic or thought boundaries.',
+                  'Split this long spoken passage into paragraphs at natural topic shifts.',
                   'Rules:',
-                  '- Do NOT change any wording, only insert \\n\\n between sentences',
-                  '- Aim for paragraphs of 3-5 sentences, but fewer or more is fine',
+                  '- Do NOT change any wording — return the exact original text, just split into chunks',
+                  '- Each paragraph MUST be at least 3 sentences long',
+                  '- Aim for 3-6 sentences per paragraph (roughly 200-500 characters each)',
+                  '- Only break where the speaker changes topic — NOT between every sentence',
+                  '- Fewer, larger paragraphs are better than many small ones',
                   '',
                   updated[idx].text,
                 ].join('\n'),
@@ -175,7 +178,28 @@ export function createOpenAIClient(apiKey) {
 
           const result = completion.choices[0].message.parsed;
           if (result.texts.length > 0) {
-            updated[idx] = { ...updated[idx], text: result.texts.join('\n\n') };
+            // Merge any overly-short paragraphs (< 150 chars) with the next one
+            const merged = [];
+            let buffer = '';
+            for (const chunk of result.texts) {
+              if (buffer) {
+                buffer += ' ' + chunk;
+              } else {
+                buffer = chunk;
+              }
+              if (buffer.length >= 150) {
+                merged.push(buffer);
+                buffer = '';
+              }
+            }
+            if (buffer) {
+              if (merged.length > 0) {
+                merged[merged.length - 1] += ' ' + buffer;
+              } else {
+                merged.push(buffer);
+              }
+            }
+            updated[idx] = { ...updated[idx], text: merged.join('\n\n') };
           }
         } catch (error) {
           console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
