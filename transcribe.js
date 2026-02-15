@@ -145,10 +145,80 @@ function splitLongUtterances(utterances, sentences, threshold = 4000) {
   return result;
 }
 
+/**
+ * Build a context string for speaker identification from source metadata
+ * and any user-provided speaker hint (e.g. "Meeting between Nick and Sarah").
+ */
+function buildSpeakerContext(sourceInfo, speakerHint) {
+  const parts = [];
+  if (sourceInfo.title) parts.push(`Video title: ${sourceInfo.title}`);
+  if (sourceInfo.uploader) parts.push(`Channel: ${sourceInfo.uploader}`);
+  if (sourceInfo.description) parts.push(`Video description: ${sourceInfo.description.slice(0, 1000)}`);
+  if (speakerHint) parts.push(`Additional context: ${speakerHint}`);
+  return parts.join('\n');
+}
+
+/**
+ * Run speaker identification and paragraph breaking via OpenAI.
+ *
+ * Three modes depending on available config:
+ *   1. diarize + openai  → speaker ID and paragraph breaking run concurrently
+ *   2. openai only       → paragraph breaking only (no speaker ID)
+ *   3. no openai         → pass utterances through unchanged
+ *
+ * @returns {{ utterances, speakers: Array, reasoning: string }}
+ */
+async function identifyAndFormat(openai, utterances, { diarize, context }) {
+  const empty = { utterances, speakers: [], reasoning: '' };
+
+  if (utterances.length === 0 || !openai) {
+    if (diarize && !openai) {
+      console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
+    }
+    return empty;
+  }
+
+  if (!diarize) {
+    console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
+    return { ...empty, utterances: await openai.breakIntoParagraphs(utterances) };
+  }
+
+  // Full pipeline — speaker ID and paragraph breaking are independent, run concurrently
+  console.log('\n🔍 Step 2/3: Identifying speakers + formatting...\n');
+  if (context) {
+    console.log(`   Using context: ${context.split('\n').length} source(s) (${context.length} chars)`);
+  }
+
+  const [identification, broken] = await Promise.all([
+    openai.identifySpeakers(utterances, context),
+    openai.breakIntoParagraphs(utterances),
+  ]);
+
+  for (const s of identification.speakers) {
+    const label = s.label === s.name ? s.label : `${s.label} → ${s.name}`;
+    console.log(`   ${label} (${s.confidence} confidence)`);
+  }
+
+  return {
+    utterances: mapSpeakerNames(broken, identification.speakers),
+    speakers: identification.speakers,
+    reasoning: identification.reasoning,
+  };
+}
+
 // ============================================================================
 // Command Handlers
 // ============================================================================
 
+/**
+ * Main transcription pipeline:
+ *
+ *   1. Resolve input (URL download or local file validation)
+ *   2. Transcribe via AssemblyAI (upload, transcribe, diarize)
+ *   3. Pre-chunk long utterances via sentence segmentation (free AssemblyAI endpoint)
+ *   4. Identify speakers + paragraph-break via OpenAI (concurrent, optional)
+ *   5. Format output (markdown/text/JSON) and save to vault + SQLite
+ */
 async function handleTranscribe(argv) {
   const { assemblyai, openai } = initClients();
 
@@ -157,7 +227,7 @@ async function handleTranscribe(argv) {
   const speakerContext = argv.speakers || '';
   const format = argv.format;
 
-  // Step 0: Resolve input — URL or local file
+  // Resolve input — URL or local file
   let sourceInfo;
 
   if (isUrl(input)) {
@@ -218,56 +288,13 @@ async function handleTranscribe(argv) {
       console.log(`   Grouped ${sentences.length} sentences into ${transcript.utterances.length} segment(s)`);
     }
 
-    // Step 2: Identify speakers + break into paragraphs (concurrent)
-    let speakerMapping = [];
-    let speakerReasoning = '';
-    let mappedUtterances;
-
-    if (diarize && transcript.utterances.length > 0 && openai) {
-      console.log('\n🔍 Step 2/3: Identifying speakers + formatting...\n');
-
-      // Build combined context from source metadata + user-provided speakers
-      const contextParts = [];
-      if (sourceInfo.title) contextParts.push(`Video title: ${sourceInfo.title}`);
-      if (sourceInfo.uploader) contextParts.push(`Channel: ${sourceInfo.uploader}`);
-      if (sourceInfo.description) {
-        const truncated = sourceInfo.description.slice(0, 1000);
-        contextParts.push(`Video description: ${truncated}`);
-      }
-      if (speakerContext) contextParts.push(`Additional context: ${speakerContext}`);
-      const combinedContext = contextParts.join('\n');
-
-      if (contextParts.length > 0) {
-        console.log(`   Using context: ${contextParts.length} source(s) (${combinedContext.length} chars)`);
-      }
-
-      // Run speaker ID and paragraph breaking concurrently — they're independent
-      const [identification, brokenUtterances] = await Promise.all([
-        openai.identifySpeakers(transcript.utterances, combinedContext),
-        openai.breakIntoParagraphs(transcript.utterances),
-      ]);
-
-      speakerMapping = identification.speakers;
-      speakerReasoning = identification.reasoning;
-
-      for (const s of speakerMapping) {
-        const label = s.label === s.name ? s.label : `${s.label} → ${s.name}`;
-        console.log(`   ${label} (${s.confidence} confidence)`);
-      }
-
-      mappedUtterances = mapSpeakerNames(brokenUtterances, speakerMapping);
-    } else {
-      if (diarize && !openai) {
-        console.log('\n⏩ Step 2/3: Skipping speaker identification (no OpenAI key)');
-      } else {
-        console.log('\n⏩ Step 2/3: Skipping speaker identification (diarization disabled)');
-      }
-
-      mappedUtterances = transcript.utterances;
-      if (openai) {
-        mappedUtterances = await openai.breakIntoParagraphs(mappedUtterances);
-      }
-    }
+    // Step 2: Identify speakers + break into paragraphs
+    const context = buildSpeakerContext(sourceInfo, speakerContext);
+    const {
+      utterances: mappedUtterances,
+      speakers: speakerMapping,
+      reasoning: speakerReasoning,
+    } = await identifyAndFormat(openai, transcript.utterances, { diarize, context });
 
     // Step 3: Format and save output
     console.log('\n💾 Step 3/3: Saving output...\n');
