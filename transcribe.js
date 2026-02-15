@@ -362,11 +362,8 @@ async function handleFeed(argv) {
       console.log('No saved feeds. Use: feed add <name> <url>');
       return;
     }
-    const header = `${'Name'.padEnd(20)} URL`;
-    console.log(header);
-    console.log('─'.repeat(header.length));
-    for (const [name, url] of entries) {
-      console.log(`${name.padEnd(20)} ${url}`);
+    for (const [name] of entries) {
+      console.log(`  ${name}`);
     }
     console.log(`\n${entries.length} feed(s) saved.`);
     return;
