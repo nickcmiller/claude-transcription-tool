@@ -182,7 +182,12 @@ async function handleTranscribe(argv) {
     }
 
     // Apply speaker name mapping
-    const mappedUtterances = mapSpeakerNames(transcript.utterances, speakerMapping);
+    let mappedUtterances = mapSpeakerNames(transcript.utterances, speakerMapping);
+
+    // Break long utterances into paragraphs
+    if (openai) {
+      mappedUtterances = await openai.breakIntoParagraphs(mappedUtterances);
+    }
 
     // Step 3: Format and save output
     console.log('\n💾 Step 3/3: Saving output...\n');
