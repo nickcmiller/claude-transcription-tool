@@ -130,7 +130,7 @@ export function createOpenAIClient(apiKey) {
 
     /**
      * Break long utterances into paragraphs for readability.
-     * Batches all qualifying utterances into one API call.
+     * Processes each qualifying utterance individually.
      * @param {Array} utterances - Array of { speaker, text, ... } objects
      * @param {object} [opts]
      * @param {number} [opts.threshold=2500] - Char count above which to paragraph-break
@@ -138,56 +138,51 @@ export function createOpenAIClient(apiKey) {
      */
     async breakIntoParagraphs(utterances, { threshold = 2500 } = {}) {
       const longIndices = [];
-      const longTexts = [];
       for (let i = 0; i < utterances.length; i++) {
         if (utterances[i].text.length > threshold) {
           longIndices.push(i);
-          longTexts.push(utterances[i].text);
         }
       }
 
       if (longIndices.length === 0) return utterances;
 
-      try {
-        console.log(`   Breaking ${longIndices.length} long passage(s) into paragraphs...`);
+      console.log(`   Breaking ${longIndices.length} long passage(s) into paragraphs...`);
+      const updated = [...utterances];
 
-        const prompt = [
-          `Insert paragraph breaks (\\n\\n) into each of these ${longTexts.length} long spoken passages at natural topic or thought boundaries.`,
-          'Rules:',
-          '- Do NOT change any wording, only insert \\n\\n between sentences',
-          '- Aim for paragraphs of 3-6 sentences each',
-          '- Return exactly the same number of texts in the same order',
-          '',
-          ...longTexts.map((t, i) => `--- TEXT ${i + 1} ---\n${t}`),
-        ].join('\n');
+      for (const idx of longIndices) {
+        try {
+          const completion = await client.beta.chat.completions.parse({
+            model: 'gpt-5-nano',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a text formatter. Insert paragraph breaks into long spoken passages to improve readability. Never alter the wording.',
+              },
+              {
+                role: 'user',
+                content: [
+                  'Insert paragraph breaks (\\n\\n) into this long spoken passage at natural topic or thought boundaries.',
+                  'Rules:',
+                  '- Do NOT change any wording, only insert \\n\\n between sentences',
+                  '- Aim for paragraphs of 3-6 sentences each',
+                  '',
+                  updated[idx].text,
+                ].join('\n'),
+              },
+            ],
+            response_format: zodResponseFormat(ParagraphsSchema, 'paragraphs'),
+          });
 
-        const completion = await client.beta.chat.completions.parse({
-          model: 'gpt-5-nano',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a text formatter. Insert paragraph breaks into long spoken passages to improve readability. Never alter the wording.',
-            },
-            { role: 'user', content: prompt },
-          ],
-          response_format: zodResponseFormat(ParagraphsSchema, 'paragraphs'),
-        });
-
-        const result = completion.choices[0].message.parsed;
-        if (result.texts.length !== longIndices.length) {
-          console.warn('   Paragraph breaking returned wrong count, skipping.');
-          return utterances;
+          const result = completion.choices[0].message.parsed;
+          if (result.texts.length === 1) {
+            updated[idx] = { ...updated[idx], text: result.texts[0] };
+          }
+        } catch (error) {
+          console.warn(`   Paragraph breaking failed for passage: ${error.message}`);
         }
-
-        const updated = [...utterances];
-        for (let i = 0; i < longIndices.length; i++) {
-          updated[longIndices[i]] = { ...updated[longIndices[i]], text: result.texts[i] };
-        }
-        return updated;
-      } catch (error) {
-        console.warn(`   Paragraph breaking failed: ${error.message}`);
-        return utterances;
       }
+
+      return updated;
     },
   };
 }
