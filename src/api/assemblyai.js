@@ -57,6 +57,21 @@ export function createAssemblyAIClient(apiKey) {
         audioDuration: transcript.audio_duration,
         id: transcript.id,
       };
-    }
+    },
+
+    /**
+     * Fetch sentence-level segmentation for a completed transcript
+     * @param {string} transcriptId - AssemblyAI transcript ID
+     * @returns {Array} Array of { text, start, end, speaker } objects
+     */
+    async getSentences(transcriptId) {
+      const response = await client.transcripts.sentences(transcriptId);
+      return response.sentences.map(s => ({
+        text: s.text,
+        start: s.start,
+        end: s.end,
+        speaker: s.speaker || 'A',
+      }));
+    },
   };
 }

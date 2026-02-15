@@ -150,20 +150,25 @@ export function createOpenAIClient(apiKey) {
         return { speakers: [], reasoning: 'No utterances provided' };
       }
 
-      // Sample utterances broadly (beginning, middle, end) for better speaker coverage
-      const sampled = sampleUtterances(utterances, 50);
-      const excerpt = sampled
-        .map(u => `${u.speaker}: ${u.text}`)
-        .join('\n');
-
       const uniqueSpeakers = [...new Set(utterances.map(u => u.speaker))];
+      const singleSpeaker = uniqueSpeakers.length === 1;
+      const model = singleSpeaker ? 'gpt-5-nano' : 'gpt-5';
+
+      // For single speaker, short excerpt + metadata is enough; for multi, sample broadly
+      let excerpt;
+      if (singleSpeaker) {
+        excerpt = `${uniqueSpeakers[0]}: ${utterances[0].text.slice(0, 500)}`;
+      } else {
+        const sampled = sampleUtterances(utterances, 50);
+        excerpt = sampled.map(u => `${u.speaker}: ${u.text}`).join('\n');
+      }
 
       const prompt = [
         'Analyze this transcript and identify who each speaker is.',
         context ? `\nContext: ${context}` : '',
         `\nSpeakers to identify: ${uniqueSpeakers.join(', ')}`,
         `\nTranscript excerpt:\n${excerpt}`,
-        '\nThe excerpt contains samples from the beginning, middle, and end of the transcript.',
+        singleSpeaker ? '' : '\nThe excerpt contains samples from the beginning, middle, and end of the transcript.',
         '\nIdentify each speaker based on context clues in the conversation (introductions, names mentioned, roles discussed). If you cannot identify a speaker, keep their original label.',
       ].join('');
 
@@ -171,7 +176,7 @@ export function createOpenAIClient(apiKey) {
         console.log('Identifying speakers with OpenAI...');
 
         const completion = await client.beta.chat.completions.parse({
-          model: 'gpt-5',
+          model,
           messages: [
             {
               role: 'system',
@@ -183,7 +188,7 @@ export function createOpenAIClient(apiKey) {
         });
 
         const result = completion.choices[0].message.parsed;
-        logUsage('Speaker ID (gpt-5)', 'gpt-5', completion.usage);
+        logUsage(`Speaker ID (${model})`, model, completion.usage);
         return result;
       } catch (error) {
         console.warn(`Speaker identification failed: ${error.message}`);

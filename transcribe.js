@@ -144,9 +144,31 @@ async function handleTranscribe(argv) {
     const transcript = await assemblyai.transcribe(sourceInfo.filePath, { diarize });
 
     console.log(`\n✅ Transcription complete (${Math.round(transcript.audioDuration)}s audio)`);
-    if (transcript.utterances.length > 0) {
-      const speakers = [...new Set(transcript.utterances.map(u => u.speaker))];
+    const speakers = transcript.utterances.length > 0
+      ? [...new Set(transcript.utterances.map(u => u.speaker))]
+      : [];
+    if (speakers.length > 0) {
       console.log(`   ${speakers.length} speaker(s) detected: ${speakers.join(', ')}`);
+    }
+
+    // For single-speaker transcripts, replace the one giant utterance with
+    // sentence-grouped segments so paragraph breaking gets manageable chunks
+    if (speakers.length === 1 && transcript.utterances.length > 0) {
+      console.log('   Single speaker — fetching sentence segmentation...');
+      const sentences = await assemblyai.getSentences(transcript.id);
+      const grouped = [];
+      let current = { speaker: sentences[0].speaker, text: '', start: sentences[0].start, end: 0 };
+      for (const s of sentences) {
+        if (current.text.length + s.text.length > 4000 && current.text.length > 0) {
+          grouped.push({ ...current });
+          current = { speaker: s.speaker, text: '', start: s.start, end: 0 };
+        }
+        current.text += (current.text ? ' ' : '') + s.text;
+        current.end = s.end;
+      }
+      if (current.text) grouped.push(current);
+      transcript.utterances = grouped;
+      console.log(`   Grouped ${sentences.length} sentences into ${grouped.length} segment(s)`);
     }
 
     // Step 2: Identify speakers (if diarization enabled and OpenAI available)
