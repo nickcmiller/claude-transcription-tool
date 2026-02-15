@@ -4,6 +4,8 @@
 
 import { AssemblyAI } from 'assemblyai';
 
+const ASSEMBLYAI_PRICING = { perHour: 0.37 };
+
 /**
  * Create an AssemblyAI client for transcription
  * @param {string} apiKey - AssemblyAI API key
@@ -31,6 +33,11 @@ export function createAssemblyAIClient(apiKey) {
       console.log(`Speaker diarization: ${diarize ? 'enabled' : 'disabled'}`);
 
       const transcript = await client.transcripts.transcribe(config);
+
+      if (transcript.audio_duration) {
+        const cost = (transcript.audio_duration / 3600) * ASSEMBLYAI_PRICING.perHour;
+        console.log(`   Transcription: ${Math.round(transcript.audio_duration)}s audio → $${cost.toFixed(4)}`);
+      }
 
       if (transcript.status === 'error') {
         throw new Error(`Transcription failed: ${transcript.error}`);
