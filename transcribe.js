@@ -12,6 +12,10 @@
  * USAGE:
  *   node .scripts/transcription/transcribe.js transcribe <audio-file-or-url> [options]
  *   node .scripts/transcription/transcribe.js list [options]
+ *   node .scripts/transcription/transcribe.js podcast <query>
+ *   node .scripts/transcription/transcribe.js episodes <id> [-n limit]
+ *   node .scripts/transcription/transcribe.js feed <url-or-name> [-n limit]
+ *   node .scripts/transcription/transcribe.js feed add|rm|list
  *
  * EXAMPLES:
  *   node .scripts/transcription/transcribe.js transcribe recording.mp3
@@ -21,6 +25,8 @@
  *   node .scripts/transcription/transcribe.js transcribe call.wav -o "Resources/Meetings/call.md"
  *   node .scripts/transcription/transcribe.js transcribe lecture.mp3 --no-diarize --format text
  *   node .scripts/transcription/transcribe.js list --channel Dwarkesh -n 10
+ *   node .scripts/transcription/transcribe.js feed add stratechery "https://example.com/feed"
+ *   node .scripts/transcription/transcribe.js feed stratechery -n 5
  *
  * OUTPUT:
  *   - Markdown/text/JSON file → Resources/Transcripts/ (or custom -o path)
