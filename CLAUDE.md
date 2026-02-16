@@ -149,14 +149,6 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - `fast-xml-parser` — RSS/XML feed parsing
 - `yt-dlp` — external binary for audio download (`brew install yt-dlp`)
 
-## Post-Transcription: Save to Reader
-
-After transcribing, offer to save the transcript to Readwise Reader for highlighting. Use the `/reader-save` skill with the transcript's source URL, title, and channel from the SQLite DB.
-
-- **YouTube transcripts** → `--category video` (Reader displays them as videos)
-- **Podcasts and other sources** → `--category article`
-- Always tag with `transcript`
-
 ## CLI Reference
 
 Run `./transcribe.js --help` for full command and option documentation.
