@@ -2,6 +2,22 @@
 
 Audio transcription with speaker diarization (AssemblyAI) and speaker identification (OpenAI structured output).
 
+```
+transcribe.js              Main entry point, command handlers, pipeline orchestration
+├── src/cli/config.js      CLI commands and options (yargs)
+├── src/api/
+│   ├── assemblyai.js      Transcription + sentence segmentation
+│   ├── openai.js          Speaker ID + paragraph breaking (structured output)
+│   ├── itunes.js          iTunes Search API (podcast discovery)
+│   └── rss.js             RSS feed parser (private/paywalled podcasts)
+└── src/utils/
+    ├── downloader.js      Audio download via yt-dlp (any URL)
+    ├── feeds.js           Saved feed URL storage (feeds.json)
+    ├── formatters.js      Markdown, text, JSON output formatting
+    ├── storage.js         SQLite metadata storage + queries
+    └── validators.js      Audio file and format validation
+```
+
 ## Quick Start
 
 ```bash

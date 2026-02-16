@@ -33,7 +33,7 @@
 ## API Keys
 
 - **AssemblyAI**: https://www.assemblyai.com/app/account — free tier includes hours of transcription
-- **OpenAI**: https://platform.openai.com/api-keys — uses gpt-4o-mini (very low cost)
+- **OpenAI**: https://platform.openai.com/api-keys — uses gpt-5-nano for paragraph breaking (very low cost)
 
 ## Verify
 
