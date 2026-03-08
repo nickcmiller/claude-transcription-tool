@@ -111,7 +111,7 @@ When the user asks to transcribe a podcast episode by name (e.g. "transcribe the
 
 1. Run `feed list` to see if a feed is saved for that podcast
 2. If found, run `feed <name> -n 5` to get recent episodes with audio URLs
-3. Run `transcribe <audio-url> -t "Episode Title"` with the episode URL and title from the results. **Always pass `--title`** for feed/URL sources — without it, the output filename comes from the URL slug instead of the episode title.
+3. Run `transcribe <audio-url> -t "Episode Title"` with the episode URL and title from the results. ALWAYS pass `--title` for feed/URL sources — without it, the output filename comes from the URL slug instead of the episode title.
 
 If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for public podcasts via iTunes.
 
