@@ -11,6 +11,7 @@
  *
  * USAGE:
  *   node .scripts/transcription/transcribe.js transcribe <audio-file-or-url> [options]
+ *   node .scripts/transcription/transcribe.js reidentify <query> [-s speakers] [--dry-run]
  *   node .scripts/transcription/transcribe.js list [options]
  *   node .scripts/transcription/transcribe.js podcast <query>
  *   node .scripts/transcription/transcribe.js episodes <id> [-n limit]
@@ -24,6 +25,7 @@
  *   node .scripts/transcription/transcribe.js transcribe https://podcast-host.com/episode.mp3
  *   node .scripts/transcription/transcribe.js transcribe call.wav -o "Resources/Meetings/call.md"
  *   node .scripts/transcription/transcribe.js transcribe lecture.mp3 --no-diarize --format text
+ *   node .scripts/transcription/transcribe.js reidentify "SwN0ozZHZfw" -s "Nick and Sarah"
  *   node .scripts/transcription/transcribe.js list --channel Dwarkesh -n 10
  *   node .scripts/transcription/transcribe.js feed add stratechery "https://example.com/feed"
  *   node .scripts/transcription/transcribe.js feed stratechery -n 5

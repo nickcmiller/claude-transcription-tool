@@ -40,3 +40,19 @@
 ```bash
 node .scripts/transcription/transcribe.js --help
 ```
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `yt-dlp: command not found` or `ffmpeg` errors | `brew install yt-dlp ffmpeg` |
+| `ASSEMBLYAI_API_KEY not found` | Check `.env` exists and key is set (copy from `.env.example`) |
+| `Unsupported format` | Supported: mp3, wav, m4a, flac, ogg, webm, mp4, aac, wma, aiff |
+| OpenAI speaker ID skipped | `OPENAI_API_KEY` not set in `.env` — tool still works, just without speaker names |
+| `File not found` | Check that audio file path is correct and file exists |
+
+## Security Notes
+
+- API keys live in `.env` (gitignored) — never commit this file
+- `feeds.json` (gitignored) may contain private RSS URLs with auth tokens
+- `raw_metadata` in the database stores full yt-dlp output which may include session info

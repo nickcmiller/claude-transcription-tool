@@ -18,7 +18,9 @@ transcribe.js                  Main entry point, command handlers
     └── validators.js          Audio file and format validation
 ```
 
-**Data flow**: CLI args → handler → [yt-dlp if URL] → AssemblyAI (transcribe + diarize) → [sentence segmentation for long utterances] → OpenAI (identify speakers + paragraph breaking, concurrent) → formatters → console output + file save → SQLite metadata save
+**Data flow (transcribe)**: CLI args → handler → [yt-dlp if URL] → AssemblyAI (transcribe + diarize) → [sentence segmentation for long utterances] → OpenAI (identify speakers + paragraph breaking, concurrent) → formatters → console output + file save → SQLite metadata save
+
+**Data flow (reidentify)**: CLI args → DB lookup → AssemblyAI (fetch existing transcript, free) → [sentence segmentation] → OpenAI (re-identify speakers + paragraph breaking) → formatters → overwrite vault file + update DB
 
 ## Component Responsibilities
 
@@ -105,6 +107,14 @@ sqlite3 "../transcription-data/transcription.db" "SELECT content FROM transcript
 2. Create handler function in `transcribe.js`
 3. Register handler in the `handlers` object in `main()`
 
+### Re-identifying Speakers
+
+Use the `reidentify` command (alias `reid`) to re-run speaker identification on an existing transcript without re-transcribing (no AssemblyAI cost). Looks up the transcript by AssemblyAI ID, source URL, or title substring.
+
+1. `reidentify "query" --dry-run` — verify the right transcript is found
+2. `reidentify "query" -s "Additional speaker context"` — re-run with new hints
+3. Overwrites the existing vault file and updates the DB record
+
 ### Transcribing a Podcast by Name
 
 When the user asks to transcribe a podcast episode by name (e.g. "transcribe the latest Stratechery"), check saved feeds first:
@@ -136,6 +146,7 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - **`list` command** — query transcript history from the CLI with filters (channel, speaker, source type)
 - **`podcast` command** — search for podcasts by name via iTunes Search API (no auth required)
 - **`episodes` command** — list recent episodes for a podcast by iTunes ID, with direct audio URLs for transcription
+- **`reidentify` command** (alias `reid`) — re-run speaker identification on an existing transcript without re-transcribing; looks up by ID, URL, or title; supports `--dry-run` and `-s` for speaker hints
 - **`feed` command** — fetch RSS feed episodes (supports saved private feeds with auth tokens in URL); saved feeds stored in `feeds.json` (gitignored)
 
 ## Dependencies

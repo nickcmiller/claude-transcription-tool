@@ -35,6 +35,10 @@ node transcribe.js feed add stratechery "https://example.com/private-feed"
 node transcribe.js feed stratechery -n 5
 node transcribe.js feed list
 
+# Re-identify speakers on an existing transcript (no re-transcription cost)
+node transcribe.js reidentify "SwN0ozZHZfw" --dry-run
+node transcribe.js reidentify "SwN0ozZHZfw" -s "Nick and Sarah"
+
 # Query transcript history
 node transcribe.js list --channel Dwarkesh -n 10
 ```
