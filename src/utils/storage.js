@@ -161,6 +161,30 @@ export function listTranscripts(dataDir, { channel, speaker, limit = 20, sourceT
   return db.prepare(sql).all(...params);
 }
 
+/**
+ * Find a transcript by query — matches source_url, AssemblyAI ID, or title (LIKE)
+ * @param {string} dataDir - Data directory path
+ * @param {string} query - URL, transcript ID, or title keyword
+ * @returns {Object|null} Full transcript record or null
+ */
+export function findTranscript(dataDir, query) {
+  const db = getDb(dataDir);
+
+  // Try exact ID match first
+  const byId = db.prepare('SELECT * FROM transcripts WHERE id = ?').get(query);
+  if (byId) return byId;
+
+  // Try URL match (exact or contains)
+  const byUrl = db.prepare('SELECT * FROM transcripts WHERE source_url = ? OR source_url LIKE ?').get(query, `%${query}%`);
+  if (byUrl) return byUrl;
+
+  // Try title keyword match
+  const byTitle = db.prepare('SELECT * FROM transcripts WHERE title LIKE ? ORDER BY created_at DESC LIMIT 1').get(`%${query}%`);
+  if (byTitle) return byTitle;
+
+  return null;
+}
+
 // ============================================================================
 // Transcript Storage
 // ============================================================================

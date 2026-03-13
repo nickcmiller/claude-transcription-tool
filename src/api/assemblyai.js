@@ -73,5 +73,35 @@ export function createAssemblyAIClient(apiKey) {
         speaker: s.speaker || 'A',
       }));
     },
+
+    /**
+     * Fetch a completed transcript by ID (no re-transcription cost)
+     * @param {string} transcriptId - AssemblyAI transcript ID
+     * @returns {Object} { text, utterances, audioDuration, id }
+     */
+    async getTranscript(transcriptId) {
+      const transcript = await client.transcripts.get(transcriptId);
+
+      if (transcript.status === 'error') {
+        throw new Error(`Transcript retrieval failed: ${transcript.error}`);
+      }
+      if (transcript.status !== 'completed') {
+        throw new Error(`Transcript not ready (status: ${transcript.status})`);
+      }
+
+      const utterances = (transcript.utterances || []).map(u => ({
+        speaker: u.speaker,
+        text: u.text,
+        start: u.start,
+        end: u.end,
+      }));
+
+      return {
+        text: transcript.text,
+        utterances,
+        audioDuration: transcript.audio_duration,
+        id: transcript.id,
+      };
+    },
   };
 }

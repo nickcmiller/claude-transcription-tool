@@ -54,7 +54,7 @@ import {
   formatJson,
   printConsoleOutput,
 } from './src/utils/formatters.js';
-import { saveTranscript, findBySourceUrl, listTranscripts } from './src/utils/storage.js';
+import { saveTranscript, findBySourceUrl, findTranscript, listTranscripts } from './src/utils/storage.js';
 import { searchPodcasts, getEpisodes } from './src/api/itunes.js';
 import { fetchFeed } from './src/api/rss.js';
 import { loadFeeds, addFeed, removeFeed, getFeedUrl } from './src/utils/feeds.js';
@@ -146,14 +146,36 @@ function splitLongUtterances(utterances, sentences, threshold = 4000) {
 }
 
 /**
+ * Fetch sentence segmentation and re-chunk long utterances into ~threshold-char segments.
+ * Short utterances pass through unchanged. Returns the (possibly chunked) utterances array.
+ */
+async function chunkLongUtterances(assemblyai, utterances, transcriptId, threshold = 4000) {
+  const hasLong = utterances.some(u => u.text.length > threshold);
+  if (!hasLong) return utterances;
+
+  console.log('   Fetching sentence segmentation for long utterance(s)...');
+  const sentences = await assemblyai.getSentences(transcriptId);
+  const speakers = [...new Set(utterances.map(u => u.speaker))];
+
+  let chunked;
+  if (speakers.length === 1) {
+    chunked = groupSentences(sentences);
+  } else {
+    chunked = splitLongUtterances(utterances, sentences, threshold);
+  }
+  console.log(`   Grouped ${sentences.length} sentences into ${chunked.length} segment(s)`);
+  return chunked;
+}
+
+/**
  * Build a context string for speaker identification from source metadata
  * and any user-provided speaker hint (e.g. "Meeting between Nick and Sarah").
  */
-function buildSpeakerContext(sourceInfo, speakerHint) {
+function buildSpeakerContext({ title, channel, description } = {}, speakerHint) {
   const parts = [];
-  if (sourceInfo.title) parts.push(`Video title: ${sourceInfo.title}`);
-  if (sourceInfo.uploader) parts.push(`Channel: ${sourceInfo.uploader}`);
-  if (sourceInfo.description) parts.push(`Video description: ${sourceInfo.description.slice(0, 1000)}`);
+  if (title) parts.push(`Video title: ${title}`);
+  if (channel) parts.push(`Channel: ${channel}`);
+  if (description) parts.push(`Video description: ${description.slice(0, 1000)}`);
   if (speakerHint) parts.push(`Additional context: ${speakerHint}`);
   return parts.join('\n');
 }
@@ -271,25 +293,10 @@ async function handleTranscribe(argv) {
     }
 
     // Split long utterances using AssemblyAI sentence segmentation
-    const CHUNK_THRESHOLD = 4000;
-    const hasLongUtterances = transcript.utterances.some(u => u.text.length > CHUNK_THRESHOLD);
-
-    if (hasLongUtterances) {
-      console.log('   Fetching sentence segmentation for long utterance(s)...');
-      const sentences = await assemblyai.getSentences(transcript.id);
-
-      if (speakers.length === 1) {
-        // Single speaker: group all sentences into timestamped segments
-        transcript.utterances = groupSentences(sentences);
-      } else {
-        // Multi-speaker: replace only the long utterances with sentence-grouped chunks
-        transcript.utterances = splitLongUtterances(transcript.utterances, sentences, CHUNK_THRESHOLD);
-      }
-      console.log(`   Grouped ${sentences.length} sentences into ${transcript.utterances.length} segment(s)`);
-    }
+    transcript.utterances = await chunkLongUtterances(assemblyai, transcript.utterances, transcript.id);
 
     // Step 2: Identify speakers + break into paragraphs
-    const context = buildSpeakerContext(sourceInfo, speakerContext);
+    const context = buildSpeakerContext({ title: sourceInfo.title, channel: sourceInfo.uploader, description: sourceInfo.description }, speakerContext);
     const {
       utterances: mappedUtterances,
       speakers: speakerMapping,
@@ -551,6 +558,98 @@ async function handleFeed(argv) {
   console.log(`\n${episodes.length} episode(s). Use: transcribe <URL> to transcribe.`);
 }
 
+/**
+ * Re-identify speakers on an existing transcript without re-transcribing.
+ * Fetches utterances from AssemblyAI (free), re-runs OpenAI speaker ID + paragraphs,
+ * then overwrites the vault file and updates the database.
+ */
+async function handleReidentify(argv) {
+  const { assemblyai, openai } = initClients();
+
+  if (!openai) {
+    console.error('Error: OPENAI_API_KEY required for speaker re-identification');
+    process.exit(1);
+  }
+
+  // Step 1: Find transcript in database
+  const record = findTranscript(DATA_DIR, argv.query);
+  if (!record) {
+    console.error(`\n❌ No transcript found matching "${argv.query}"`);
+    console.error('   Try: list command to see available transcripts');
+    process.exit(1);
+  }
+
+  console.log(`\n📋 Found transcript:`);
+  console.log(`   Title:    ${record.title}`);
+  console.log(`   ID:       ${record.id}`);
+  console.log(`   Speakers: ${record.speakers}`);
+  console.log(`   File:     ${record.file_path}`);
+
+  if (argv.dryRun) {
+    console.log('\n🔍 Dry run — no changes made.');
+    return;
+  }
+
+  // Step 2: Fetch utterances from AssemblyAI (free — no re-transcription)
+  console.log('\n📥 Fetching transcript from AssemblyAI (free)...');
+  const transcript = await assemblyai.getTranscript(record.id);
+
+  const speakers = [...new Set(transcript.utterances.map(u => u.speaker))];
+  console.log(`   ${speakers.length} speaker(s): ${speakers.join(', ')}`);
+  console.log(`   ${transcript.utterances.length} utterance(s)`);
+
+  // Split long utterances
+  transcript.utterances = await chunkLongUtterances(assemblyai, transcript.utterances, record.id);
+
+  // Step 3: Re-identify speakers via OpenAI
+  const context = buildSpeakerContext({ title: record.title, channel: record.channel, description: record.description }, argv.speakers);
+
+  const {
+    utterances: mappedUtterances,
+    speakers: speakerMapping,
+    reasoning: speakerReasoning,
+  } = await identifyAndFormat(openai, transcript.utterances, { diarize: true, context });
+
+  // Step 4: Re-format and save
+  console.log('\n💾 Saving updated transcript...\n');
+
+  const speakerNames = speakerMapping.map(s => s.name);
+  const metadata = {
+    audioDuration: transcript.audioDuration,
+    transcriptId: transcript.id,
+    speakerReasoning,
+    speakers: speakerNames,
+    ...(record.source_url ? { sourceUrl: record.source_url, sourceTitle: record.title } : {}),
+  };
+
+  const content = formatMarkdown(record.title, mappedUtterances, transcript.text, metadata);
+
+  // Write to existing file path
+  const outputPath = resolve(VAULT_ROOT, record.file_path);
+  writeFileSync(outputPath, content, 'utf-8');
+  console.log(`   Updated: ${outputPath}`);
+
+  // Update database record
+  saveTranscript(DATA_DIR, {
+    id: record.id,
+    source_url: record.source_url,
+    source_type: record.source_type,
+    title: record.title,
+    description: record.description,
+    channel: record.channel,
+    channel_url: record.channel_url,
+    duration_seconds: record.duration_seconds,
+    speakers: JSON.stringify(speakerNames),
+    file_path: record.file_path,
+    created_at: record.created_at,
+    raw_metadata: record.raw_metadata,
+    content: content,
+  });
+
+  printConsoleOutput(mappedUtterances, transcript.text);
+  console.log('\n✅ Speaker re-identification complete!');
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -558,6 +657,7 @@ async function handleFeed(argv) {
 async function main() {
   const handlers = {
     transcribe: handleTranscribe,
+    reidentify: handleReidentify,
     list: handleList,
     podcast: handlePodcast,
     episodes: handleEpisodes,

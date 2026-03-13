@@ -177,6 +177,34 @@ export function buildCli(handlers) {
     )
 
     // ============================================================================
+    // reidentify command
+    // ============================================================================
+    .command(
+      ['reidentify <query>', 'reid <query>'],
+      'Re-run speaker identification on an existing transcript (no re-transcription cost)',
+      (yargs) => {
+        return yargs
+          .positional('query', {
+            describe: 'Source URL, title keyword, or AssemblyAI transcript ID',
+            type: 'string',
+          })
+          .option('speakers', {
+            alias: 's',
+            describe: 'Context about who the speakers are (e.g., "Meeting between Nick and Sarah")',
+            type: 'string',
+          })
+          .option('dry-run', {
+            describe: 'Show what would be re-identified without doing it',
+            type: 'boolean',
+            default: false,
+          })
+          .example('$0 reidentify "SwN0ozZHZfw"', 'Re-identify by URL keyword')
+          .example('$0 reid "Philip Lecture" -s "Jared and Philip from Zapier"', 'With speaker hint');
+      },
+      handlers.reidentify
+    )
+
+    // ============================================================================
     // feed command
     // ============================================================================
     .command(
