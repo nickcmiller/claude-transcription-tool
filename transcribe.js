@@ -334,16 +334,12 @@ async function handleTranscribe(argv) {
       outputExt = '.md';
     }
 
-    // Write file only if explicit -o path given
     let outputPath = null;
     if (argv.output) {
       outputPath = resolve(VAULT_ROOT, argv.output);
 
-      // Ensure parent directory exists
       const outputDir = dirname(outputPath);
-      if (!existsSync(outputDir)) {
-        mkdirSync(outputDir, { recursive: true });
-      }
+      mkdirSync(outputDir, { recursive: true });
 
       // Handle file collisions — append (2), (3), etc. if file exists
       if (existsSync(outputPath)) {
@@ -620,11 +616,12 @@ async function handleReidentify(argv) {
 
   const content = formatMarkdown(record.title, mappedUtterances, transcript.text, metadata);
 
-  // Write to existing file path (if one was saved)
   if (record.file_path) {
     const outputPath = resolve(VAULT_ROOT, record.file_path);
     writeFileSync(outputPath, content, 'utf-8');
     console.log(`   Updated: ${outputPath}`);
+  } else {
+    console.log('   No file path recorded — DB updated only.');
   }
 
   // Update database record
