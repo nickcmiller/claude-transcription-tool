@@ -620,10 +620,12 @@ async function handleReidentify(argv) {
 
   const content = formatMarkdown(record.title, mappedUtterances, transcript.text, metadata);
 
-  // Write to existing file path
-  const outputPath = resolve(VAULT_ROOT, record.file_path);
-  writeFileSync(outputPath, content, 'utf-8');
-  console.log(`   Updated: ${outputPath}`);
+  // Write to existing file path (if one was saved)
+  if (record.file_path) {
+    const outputPath = resolve(VAULT_ROOT, record.file_path);
+    writeFileSync(outputPath, content, 'utf-8');
+    console.log(`   Updated: ${outputPath}`);
+  }
 
   // Update database record
   saveTranscript(DATA_DIR, {
