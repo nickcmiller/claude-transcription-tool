@@ -339,7 +339,7 @@ async function handleTranscribe(argv) {
     if (argv.output) {
       outputPath = resolve(VAULT_ROOT, argv.output);
     } else {
-      const transcriptsDir = join(VAULT_ROOT, 'Resources', 'Transcripts');
+      const transcriptsDir = join(VAULT_ROOT, '..', 'Archives', 'Transcripts');
       if (!existsSync(transcriptsDir)) {
         mkdirSync(transcriptsDir, { recursive: true });
       }

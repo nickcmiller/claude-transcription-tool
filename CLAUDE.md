@@ -141,7 +141,7 @@ If no saved feed exists, fall back to `podcast <name>` → `episodes <id>` for p
 - **File collision handling** — auto-appends `(2)`, `(3)`, etc. if output file already exists
 - **Utterance timestamps** — `[MM:SS]` prefix on each utterance in markdown and text output
 - **Speakers in frontmatter** — identified speaker names are included in markdown YAML frontmatter
-- **Default output**: `Resources/Transcripts/{filename}.md` in the vault
+- **Default output**: `../Archives/Transcripts/{filename}.md` (outside vault, in Archives)
 - **Metadata + Content**: Every transcription saves a row to SQLite with source info, speakers, duration, file path, and the full transcript content (enables cross-tool workflows without reading vault files)
 - **`list` command** — query transcript history from the CLI with filters (channel, speaker, source type)
 - **`podcast` command** — search for podcasts by name via iTunes Search API (no auth required)
