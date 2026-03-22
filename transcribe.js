@@ -31,8 +31,8 @@
  *   node .scripts/transcription/transcribe.js feed stratechery -n 5
  *
  * OUTPUT:
- *   - Markdown/text/JSON file → Resources/Transcripts/ (or custom -o path)
- *   - Metadata row → ../transcription-data/transcription.db (source, speakers, duration, etc.)
+ *   - Metadata + content → ../transcription-data/transcription.db
+ *   - File on disk only if -o path given
  *
  * SETUP:
  *   See SETUP.md for complete installation and configuration instructions
@@ -334,36 +334,30 @@ async function handleTranscribe(argv) {
       outputExt = '.md';
     }
 
-    // Determine output path
-    let outputPath;
+    // Write file only if explicit -o path given
+    let outputPath = null;
     if (argv.output) {
       outputPath = resolve(VAULT_ROOT, argv.output);
-    } else {
-      const transcriptsDir = join(VAULT_ROOT, '..', 'Archives', 'Transcripts');
-      if (!existsSync(transcriptsDir)) {
-        mkdirSync(transcriptsDir, { recursive: true });
+
+      // Ensure parent directory exists
+      const outputDir = dirname(outputPath);
+      if (!existsSync(outputDir)) {
+        mkdirSync(outputDir, { recursive: true });
       }
-      outputPath = join(transcriptsDir, `${sourceFilename}${outputExt}`);
-    }
 
-    // Ensure parent directory exists
-    const outputDir = dirname(outputPath);
-    if (!existsSync(outputDir)) {
-      mkdirSync(outputDir, { recursive: true });
-    }
-
-    // Handle file collisions — append (2), (3), etc. if file exists
-    if (existsSync(outputPath)) {
-      const base = basename(outputPath, outputExt);
-      let counter = 2;
-      while (existsSync(join(outputDir, `${base} (${counter})${outputExt}`))) {
-        counter++;
+      // Handle file collisions — append (2), (3), etc. if file exists
+      if (existsSync(outputPath)) {
+        const base = basename(outputPath, outputExt);
+        let counter = 2;
+        while (existsSync(join(outputDir, `${base} (${counter})${outputExt}`))) {
+          counter++;
+        }
+        outputPath = join(outputDir, `${base} (${counter})${outputExt}`);
       }
-      outputPath = join(outputDir, `${base} (${counter})${outputExt}`);
-    }
 
-    writeFileSync(outputPath, content, 'utf-8');
-    console.log(`   Saved to: ${outputPath}`);
+      writeFileSync(outputPath, content, 'utf-8');
+      console.log(`   Saved to: ${outputPath}`);
+    }
 
     // Save transcript metadata to database
     saveTranscript(DATA_DIR, {
@@ -376,7 +370,7 @@ async function handleTranscribe(argv) {
       channel_url: sourceInfo.channelUrl || null,
       duration_seconds: transcript.audioDuration,
       speakers: JSON.stringify(speakerNames),
-      file_path: relative(VAULT_ROOT, outputPath),
+      file_path: outputPath ? relative(VAULT_ROOT, outputPath) : null,
       created_at: new Date().toISOString(),
       raw_metadata: sourceInfo.rawMetadata || null,
       content: content,

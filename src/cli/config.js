@@ -58,7 +58,7 @@ export function buildCli(handlers) {
           })
           .option('output', {
             alias: 'o',
-            describe: 'Output file path (default: ../Archives/Transcripts/{filename}.md)',
+            describe: 'Output file path (no file saved by default, content stored in DB)',
             type: 'string',
           })
           .option('format', {
