@@ -284,7 +284,7 @@ async function handleTranscribe(argv) {
   try {
     // Step 1: Transcribe with AssemblyAI
     console.log('\n📝 Step 1/3: Transcribing audio...\n');
-    const transcript = await assemblyai.transcribe(sourceInfo.filePath, { diarize });
+    const transcript = await assemblyai.transcribe(sourceInfo.filePath, { diarize, speakersExpected: argv.expectedSpeakers });
 
     console.log(`\n✅ Transcription complete (${Math.round(transcript.audioDuration)}s audio)`);
     const speakers = transcript.utterances.length > 0

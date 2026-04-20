@@ -73,6 +73,11 @@ export function buildCli(handlers) {
             type: 'boolean',
             default: false,
           })
+          .option('expected-speakers', {
+            alias: 'e',
+            describe: 'Hint the exact number of speakers to improve diarization accuracy',
+            type: 'number',
+          })
           .option('force', {
             describe: 'Re-transcribe even if URL was already transcribed',
             type: 'boolean',
